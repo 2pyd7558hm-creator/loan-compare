@@ -670,8 +670,9 @@ $("loginForm").addEventListener("submit", async (e) => {
 $("forgotBtn").addEventListener("click", async () => {
   const email = $("loginEmail").value.trim();
   if (!email) { say("loginStatus", "Enter your email above, then click Forgot password.", true); return; }
-  await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-  say("loginStatus", "If that email has a login, a reset link is on its way.");
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) { say("loginStatus", /rate limit|seconds/i.test(error.message) ? "Too many emails were sent recently. Please wait an hour and try again, or ask the account owner for help." : "The reset email couldn't be sent: " + error.message, true); return; }
+  say("loginStatus", "If that email has a login, a reset link is on its way. Check spam too.");
 });
 $("setPwForm").addEventListener("submit", async (e) => {
   e.preventDefault();
