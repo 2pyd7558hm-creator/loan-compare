@@ -126,6 +126,12 @@ tbody tr:last-child td { border-bottom: 0 }
 
 .disclosure { font-size: 12px; color: var(--muted); line-height: 1.55; border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 8px; max-width: 90ch }
 .disclosure p { margin: 0 }
+.opts-head { display: flex; justify-content: space-between; align-items: end; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px }
+.opts-head h2 { margin: 0 }
+.preset { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 500 }
+.preset select { width: auto; max-width: 100%; font-size: 14px }
+.preset-note { margin: -4px 0 12px; font-size: 13px; color: var(--brand-deep) }
+
 .disclosure a { color: var(--brand-deep) }
 @media (prefers-reduced-motion: no-preference) { .bar span { transition: width .25s ease } }
 </style>
@@ -174,6 +180,20 @@ body.readonly .icon-btn, body.readonly .add { display: none }
 body.locked main > :not(#ws) { display: none }
 </style>
 
+<style>
+/* ===== Live presenting ===== */
+body.readonly .preset, body.readonly .preset-note { display: none }
+.present-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px }
+.btn.live { background: #c2410c; border-color: #c2410c; color: #fff }
+.live-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #c2410c }
+.live-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #c2410c; animation: pulse 1.4s infinite }
+@keyframes pulse { 50% { opacity: .3 } }
+.lo-pointer { position: absolute; z-index: 50; pointer-events: none; transform: translate(-3px, -3px); transition: left .08s linear, top .08s linear }
+.lo-pointer svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)) }
+.lo-pointer span { position: absolute; left: 18px; top: 16px; white-space: nowrap; background: #c2410c; color: #fff; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 6px }
+.lo-glow { outline: 3px solid #f59e0b !important; outline-offset: 3px; border-radius: 6px; box-shadow: 0 0 0 8px rgba(245,158,11,.25) !important; transition: outline-color .3s }
+@media (prefers-reduced-motion: reduce) { .lo-pointer { transition: none } .live-pill::before { animation: none } }
+</style>
 <meta name="robots" content="noindex">
 </head>
 <body>
@@ -214,7 +234,7 @@ body.locked main > :not(#ws) { display: none }
     <!-- Client view banner -->
     <div id="vClient" class="client-banner" hidden>
       <div><span class="sample">Prepared for you</span><br><b id="cvName"></b> <span id="cvTitle" style="color:var(--muted)"></span></div>
-      <div style="font-size:13px;color:var(--muted)" id="cvDate"></div>
+      <div style="display:grid;gap:4px;justify-items:end"><span class="live-pill" id="livePill" hidden>Your loan officer is presenting</span><div style="font-size:13px;color:var(--muted)" id="cvDate"></div></div>
     </div>
     <div id="vClientMissing" class="panel login" hidden>
       <h2>This comparison isn't available</h2>
@@ -257,6 +277,10 @@ body.locked main > :not(#ws) { display: none }
               <input id="shareUrl" readonly aria-label="Client link">
               <button class="btn" id="copyBtn" type="button">Copy link</button>
             </div>
+            <div class="present-row" id="presentRow" hidden>
+              <button class="btn" id="presentBtn" type="button">Present live</button>
+              <span class="status" id="presentStatus">While your client has the link open, they see your changes, your pointer, and anything you click glow.</span>
+            </div>
             <span class="status">The link shows the loan options and results only, never the email or notes. Turn sharing off any time to disable it.</span>
           </div>
         </div>
@@ -281,7 +305,20 @@ body.locked main > :not(#ws) { display: none }
   </section>
 
   <section>
-    <h2>Loan options</h2>
+    <div class="opts-head">
+      <h2>Loan options</h2>
+      <label class="preset">Quick start
+        <select id="preset" aria-label="Fill in a common comparison">
+          <option value="">Choose a common comparison…</option>
+          <option value="down">Down payment: 5% vs 10% vs 20%</option>
+          <option value="points">Points: none vs 1 vs 2</option>
+          <option value="convfha">Conventional vs FHA</option>
+          <option value="term">30-year vs 15-year</option>
+          <option value="convfhava">Conventional vs FHA vs VA</option>
+        </select>
+      </label>
+    </div>
+    <p class="preset-note" id="presetNote" hidden>Filled in with starting values from option A. Adjust rates and fees to today's pricing.</p>
     <div class="cards" id="cards"></div>
   </section>
 
@@ -552,6 +589,26 @@ function render() {
 /* Brand */
 $("brandFoot").textContent = `${BRAND.name}, powered by ${BRAND.company} · ${BRAND.nmls} · ${BRAND.address} · Equal Housing Opportunity.`;
 
+
+/* ---------- Quick-start presets: build options from option A's rate and fees ---------- */
+function applyPreset(kind) {
+  const a = { ...state.scenarios[0] };
+  const r = +a.rate || 6.75, fees = a.fees, down = a.downPct;
+  const conv = (o) => ({ type: "conv", term: 30, rate: r, points: 0, fees, downPct: down, mi: 0.45, ...o });
+  const P = {
+    down: [conv({ name: "5% down", downPct: 5, mi: 0.55 }), conv({ name: "10% down", downPct: 10, mi: 0.45 }), conv({ name: "20% down, no PMI", downPct: 20, rate: +(r - 0.125).toFixed(3) })],
+    points: [conv({ name: "No points" }), conv({ name: "1 point", points: 1, rate: +(r - 0.25).toFixed(3) }), conv({ name: "2 points", points: 2, rate: +(r - 0.5).toFixed(3) })],
+    convfha: [conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }],
+    term: [conv({ name: "30-year fixed" }), conv({ name: "15-year fixed", term: 15, rate: +(r - 0.5).toFixed(3), mi: 0.3 })],
+    convfhava: [conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }, { name: "VA, 0% down", type: "va", term: 30, rate: +(r - 0.375).toFixed(3), points: 0, fees, downPct: 0, mi: 0 }],
+  }[kind];
+  if (!P) return;
+  state.scenarios = P;
+  renderCards(); render();
+  $("presetNote").hidden = false;
+}
+$("preset").addEventListener("change", (e) => { applyPreset(e.target.value); e.target.value = ""; });
+
 renderCards();
 render();
 </script>
@@ -590,6 +647,7 @@ async function clientView() {
   document.querySelector(".intro p").textContent = "Your loan officer prepared these options for you. Use the buttons to see how each option compares over the years you expect to keep the loan.";
   document.querySelector(".intro .sample").textContent = "Your loan comparison";
   lock(false); show("vClient");
+  followPresenter();
 }
 
 /* ---- Staff ---- */
@@ -627,14 +685,15 @@ function fillClient(r) {
   $("cName").value = r ? r.client_name : ""; $("cEmail").value = r ? r.client_email || "" : "";
   $("cTitle").value = r ? r.title || "" : ""; $("cNotes").value = r ? r.notes || "" : "";
   $("delBtn").hidden = !r; $("delConfirm").hidden = true; $("shareBox").hidden = !r;
-  if (r) { $("shareOn").checked = r.shared; $("shareUrl").value = location.origin + location.pathname + "?c=" + r.share_token; $("shareRow").hidden = !r.shared; }
+  if (r) { $("shareOn").checked = r.shared; $("shareUrl").value = location.origin + location.pathname + "?c=" + r.share_token; $("shareRow").hidden = !r.shared; $("presentRow").hidden = !r.shared; }
+  if (!r || !r.shared) stopPresenting();
   say("saveStatus", "");
 }
-function newComparison() { current = null; setState(JSON.parse(JSON.stringify(BLANK))); fillClient(null); drawList(); }
+function newComparison() { stopPresenting(); current = null; setState(JSON.parse(JSON.stringify(BLANK))); fillClient(null); drawList(); }
 async function openComparison(id) {
   const { data, error } = await sb.from("comparisons").select("*").eq("id", id).single();
   if (error) { say("saveStatus", "Couldn't open it: " + error.message, true); return; }
-  current = data; setState(data.data); fillClient(data); drawList();
+  stopPresenting(); current = data; setState(data.data); fillClient(data); drawList();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 async function save() {
@@ -659,6 +718,94 @@ async function del() {
   const { error } = await sb.from("comparisons").delete().eq("id", current.id);
   if (error) { say("saveStatus", "Not deleted: " + error.message, true); return; }
   await loadList(); newComparison(); say("saveStatus", "Deleted.");
+}
+
+
+/* ---- Live presenting (Supabase Realtime broadcast on a channel named after the private link) ---- */
+const SKIP_IDS = new Set(["ws"]);
+function pathOf(el) {
+  const path = [];
+  while (el && el !== document.body) {
+    if (el.id && !SKIP_IDS.has(el.id)) return { id: el.id, path };
+    const p = el.parentElement; if (!p) break;
+    path.unshift([...p.children].indexOf(el)); el = p;
+  }
+  return null;
+}
+function resolvePath(ref) {
+  let el = ref && document.getElementById(ref.id);
+  for (const i of (ref ? ref.path : [])) { if (!el) return null; el = el.children[i]; }
+  return el;
+}
+let presentCh = null, presenting = false, lastMove = 0, stateTimer = null;
+function channelFor(token) { return sb.channel("present-" + token, { config: { broadcast: { self: false } } }); }
+function sendPresent(event, payload) { if (presenting && presentCh) presentCh.send({ type: "broadcast", event, payload }); }
+
+async function startPresenting() {
+  if (!current || !current.shared) return;
+  presentCh = channelFor(current.share_token);
+  presentCh.on("broadcast", { event: "hello" }, () => sendPresent("state", getState()));
+  await new Promise((res) => presentCh.subscribe((st) => { if (st === "SUBSCRIBED") res(); }));
+  presenting = true;
+  $("presentBtn").textContent = "Stop presenting"; $("presentBtn").classList.add("live");
+  say("presentStatus", "Live. Your client sees your changes and pointer.");
+  sendPresent("state", getState());
+}
+function stopPresenting() {
+  if (!presentCh) return;
+  sendPresent("end", {}); presenting = false;
+  sb.removeChannel(presentCh); presentCh = null;
+  $("presentBtn").textContent = "Present live"; $("presentBtn").classList.remove("live");
+  say("presentStatus", "While your client has the link open, they see your changes, your pointer, and anything you click glow.");
+}
+$("presentBtn").addEventListener("click", () => presenting ? stopPresenting() : startPresenting());
+
+// Staff side: pointer, clicks and live changes
+const mainEl = document.querySelector("main");
+mainEl.addEventListener("mousemove", (e) => {
+  if (!presenting) return;
+  const now = Date.now(); if (now - lastMove < 50) return; lastMove = now;
+  const ref = pathOf(e.target); if (!ref) return;
+  const t = resolvePath(ref) || e.target, r = t.getBoundingClientRect();
+  sendPresent("move", { ref, fx: (e.clientX - r.left) / Math.max(r.width, 1), fy: (e.clientY - r.top) / Math.max(r.height, 1) });
+});
+mainEl.addEventListener("click", (e) => {
+  if (!presenting || e.target.closest("#ws")) return;
+  const target = e.target.closest("td, th, .hl, .bar-row, .card, .chart, label, button, .panel") || e.target;
+  const ref = pathOf(target); if (ref) sendPresent("glow", { ref });
+}, true);
+const _render = render;
+render = function () { _render(); if (presenting) { clearTimeout(stateTimer); stateTimer = setTimeout(() => sendPresent("state", getState()), 150); } };
+
+// Client side: follow the presenter
+let pointerEl = null, glowEl = null, glowTimer = null, idleTimer = null;
+function showLive(on) { $("livePill").hidden = !on; if (!on && pointerEl) pointerEl.hidden = true; }
+function followPresenter() {
+  const ch = channelFor(clientToken);
+  ch.on("broadcast", { event: "state" }, ({ payload }) => { setState(payload); showLive(true); })
+    .on("broadcast", { event: "end" }, () => showLive(false))
+    .on("broadcast", { event: "move" }, ({ payload }) => {
+      const t = resolvePath(payload.ref); if (!t) return;
+      if (!pointerEl) {
+        pointerEl = document.createElement("div"); pointerEl.className = "lo-pointer";
+        pointerEl.innerHTML = '<svg width="20" height="22" viewBox="0 0 20 22"><path d="M2 2l15 8-7 2-3 7z" fill="#c2410c" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg><span>Loan officer</span>';
+        document.body.appendChild(pointerEl);
+      }
+      const r = t.getBoundingClientRect();
+      pointerEl.style.left = (r.left + scrollX + payload.fx * r.width) + "px";
+      pointerEl.style.top = (r.top + scrollY + payload.fy * r.height) + "px";
+      pointerEl.hidden = false; showLive(true);
+      clearTimeout(idleTimer); idleTimer = setTimeout(() => { if (pointerEl) pointerEl.hidden = true; }, 8000);
+    })
+    .on("broadcast", { event: "glow" }, ({ payload }) => {
+      const t = resolvePath(payload.ref); if (!t) return;
+      if (glowEl) glowEl.classList.remove("lo-glow");
+      glowEl = t; t.classList.add("lo-glow");
+      const r = t.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight) t.scrollIntoView({ behavior: "smooth", block: "center" });
+      clearTimeout(glowTimer); glowTimer = setTimeout(() => t.classList.remove("lo-glow"), 4000);
+    })
+    .subscribe((st) => { if (st === "SUBSCRIBED") ch.send({ type: "broadcast", event: "hello", payload: {} }); });
 }
 
 /* ---- Wiring ---- */

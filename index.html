@@ -126,6 +126,12 @@ tbody tr:last-child td { border-bottom: 0 }
 
 .disclosure { font-size: 12px; color: var(--muted); line-height: 1.55; border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 8px; max-width: 90ch }
 .disclosure p { margin: 0 }
+.opts-head { display: flex; justify-content: space-between; align-items: end; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px }
+.opts-head h2 { margin: 0 }
+.preset { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 500 }
+.preset select { width: auto; max-width: 100%; font-size: 14px }
+.preset-note { margin: -4px 0 12px; font-size: 13px; color: var(--brand-deep) }
+
 .disclosure a { color: var(--brand-deep) }
 @media (prefers-reduced-motion: no-preference) { .bar span { transition: width .25s ease } }
 </style>
@@ -161,7 +167,20 @@ tbody tr:last-child td { border-bottom: 0 }
   </section>
 
   <section>
-    <h2>Loan options</h2>
+    <div class="opts-head">
+      <h2>Loan options</h2>
+      <label class="preset">Quick start
+        <select id="preset" aria-label="Fill in a common comparison">
+          <option value="">Choose a common comparison…</option>
+          <option value="down">Down payment: 5% vs 10% vs 20%</option>
+          <option value="points">Points: none vs 1 vs 2</option>
+          <option value="convfha">Conventional vs FHA</option>
+          <option value="term">30-year vs 15-year</option>
+          <option value="convfhava">Conventional vs FHA vs VA</option>
+        </select>
+      </label>
+    </div>
+    <p class="preset-note" id="presetNote" hidden>Filled in with starting values from option A. Adjust rates and fees to today's pricing.</p>
     <div class="cards" id="cards"></div>
   </section>
 
@@ -431,6 +450,26 @@ function render() {
 
 /* Brand */
 $("brandFoot").textContent = `${BRAND.name}, powered by ${BRAND.company} · ${BRAND.nmls} · ${BRAND.address} · Equal Housing Opportunity.`;
+
+
+/* ---------- Quick-start presets: build options from option A's rate and fees ---------- */
+function applyPreset(kind) {
+  const a = { ...state.scenarios[0] };
+  const r = +a.rate || 6.75, fees = a.fees, down = a.downPct;
+  const conv = (o) => ({ type: "conv", term: 30, rate: r, points: 0, fees, downPct: down, mi: 0.45, ...o });
+  const P = {
+    down: [conv({ name: "5% down", downPct: 5, mi: 0.55 }), conv({ name: "10% down", downPct: 10, mi: 0.45 }), conv({ name: "20% down, no PMI", downPct: 20, rate: +(r - 0.125).toFixed(3) })],
+    points: [conv({ name: "No points" }), conv({ name: "1 point", points: 1, rate: +(r - 0.25).toFixed(3) }), conv({ name: "2 points", points: 2, rate: +(r - 0.5).toFixed(3) })],
+    convfha: [conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }],
+    term: [conv({ name: "30-year fixed" }), conv({ name: "15-year fixed", term: 15, rate: +(r - 0.5).toFixed(3), mi: 0.3 })],
+    convfhava: [conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }, { name: "VA, 0% down", type: "va", term: 30, rate: +(r - 0.375).toFixed(3), points: 0, fees, downPct: 0, mi: 0 }],
+  }[kind];
+  if (!P) return;
+  state.scenarios = P;
+  renderCards(); render();
+  $("presetNote").hidden = false;
+}
+$("preset").addEventListener("change", (e) => { applyPreset(e.target.value); e.target.value = ""; });
 
 renderCards();
 render();
