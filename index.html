@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Compare mortgage options side by side: monthly payment, cash to close, total cost and break-even. From That Mortgage Couple, powered by Xpert Home Lending, Inc.">
+<title>Loan Options Compared</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: brand bar, inputs strip, scenario cards (A–D), then results: horizon picker, summary table, charts, disclosures. */
+:root {
+  /* ===== BRAND TOKENS: swap these for the company's colors ===== */
+  --brand: #1b2a3a;        /* primary: logo navy */
+  --brand-ink: #ffffff;    /* text on primary */
+  --brand-2: #3cc0c1;      /* highlight: logo teal (LenderHomePage primary) */
+  --brand-deep: #298283;   /* teal dark enough for text */
+  /* Scenario colors A–D */
+  --s1: #1b2a3a; --s2: #3cc0c1; --s3: #567299; --s4: #c98a2e;
+  /* Neutrals (slight teal bias) */
+  --bg: #f4f7f7; --surface: #ffffff; --fg: #1f2937; --muted: #5b6876; --line: #dce4e5; --soft: #ecf2f2;
+  --good: #227a52; --good-bg: #e3f3eb;
+  --font-display: "Lora", Georgia, "Times New Roman", serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --brand: #c9d6e3; --brand-ink: #0f1a24; --brand-2: #3cc0c1; --brand-deep: #75d3d4;
+  --s1: #c9d6e3; --s2: #3cc0c1; --s3: #8399b9; --s4: #e0a54e;
+  --bg: #0e1518; --surface: #162026; --fg: #e5ecee; --muted: #98a8b0; --line: #283840; --soft: #1c2a30;
+  --good: #5fd19c; --good-bg: #173326; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --brand: #c9d6e3; --brand-ink: #0f1a24; --brand-2: #3cc0c1; --brand-deep: #75d3d4;
+  --s1: #c9d6e3; --s2: #3cc0c1; --s3: #8399b9; --s4: #e0a54e;
+  --bg: #0e1518; --surface: #162026; --fg: #e5ecee; --muted: #98a8b0; --line: #283840; --soft: #1c2a30;
+  --good: #5fd19c; --good-bg: #173326; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5 }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0 }
+.num, td, input[type=number] { font-variant-numeric: tabular-nums }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+
+/* Brand bar */
+/* Header stays white in both themes: the logo artwork has a white ground */
+.brandbar { background: #ffffff; color: #1f2937; border-bottom: 4px solid #3cc0c1 }
+.brandbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; padding-block: 10px; flex-wrap: wrap }
+.logo img { height: 88px; width: auto; display: block }
+.brandbar .meta { font-size: 13px; color: #4b5563; text-align: right; line-height: 1.45 }
+.brandbar .meta b { color: #1f2937; font-weight: 600 }
+@media (max-width: 520px) { .brandbar .meta { text-align: left } .logo img { height: 60px } }
+
+main { display: grid; gap: 28px; padding-block: 28px 40px }
+.intro h1 { font-size: clamp(24px, 4vw, 32px); font-weight: 600 }
+.intro p { color: var(--muted); max-width: 62ch; margin: 6px 0 0 }
+.sample { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-deep); margin-bottom: 6px }
+
+section > h2 { font-size: 18px; font-weight: 600; margin-bottom: 12px }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px }
+
+/* Inputs */
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px }
+label.f { display: grid; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--muted) }
+input, select { font: inherit; font-size: 15px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; width: 100%; min-width: 0 }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px }
+.affix { position: relative }
+.affix input { padding-right: 28px }
+.affix.pre input { padding-left: 22px; padding-right: 10px }
+.affix span { position: absolute; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; pointer-events: none }
+.affix:not(.pre) span { right: 10px }
+.affix.pre span { left: 10px }
+
+/* Scenario cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; align-content: start }
+.card-head { display: flex; align-items: center; gap: 10px }
+.tag { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 13px; flex: none }
+.card-head input { font-weight: 600; border-color: transparent; padding: 4px 6px; background: transparent }
+.card-head input:hover { border-color: var(--line) }
+.card .fields { grid-template-columns: 1fr 1fr; gap: 10px }
+.icon-btn { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1; padding: 4px 6px; border-radius: 6px }
+.icon-btn:hover { background: var(--soft); color: var(--fg) }
+.add { border: 1.5px dashed var(--line); border-radius: var(--radius); background: transparent; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; min-height: 120px }
+.add:hover { border-color: var(--brand); color: var(--brand) }
+
+/* Results */
+.results-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px }
+.results-head h2 { margin: 0 }
+.seg { display: inline-flex; background: var(--soft); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap }
+.seg button { font: inherit; font-size: 13.5px; font-weight: 500; border: 0; background: transparent; color: var(--muted); padding: 6px 11px; border-radius: 6px; cursor: pointer }
+.seg button[aria-pressed=true] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12) }
+.seg-label { font-size: 13px; color: var(--muted); margin-right: 8px }
+
+.highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 14px }
+.hl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px }
+.hl .k { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600 }
+.hl .v { font-family: var(--font-display); font-size: 20px; font-weight: 600; margin-top: 4px; display: flex; align-items: center; gap: 8px }
+.hl .s { font-size: 13px; color: var(--muted) }
+
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius) }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px }
+th, td { padding: 9px 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap }
+th:first-child, td:first-child { text-align: left; color: var(--muted); font-weight: 500 }
+thead th { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--fg); vertical-align: bottom }
+thead th .tag { display: inline-grid; width: 20px; height: 20px; font-size: 11px; margin-right: 6px; vertical-align: -4px }
+tr.group td { background: var(--soft); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; color: var(--muted); padding-block: 6px }
+tr.strong td { font-weight: 600; color: var(--fg) }
+td.best { color: var(--good); font-weight: 600 }
+.pill { display: inline-block; font-size: 11px; font-weight: 600; background: var(--good-bg); color: var(--good); border-radius: 99px; padding: 1px 8px; margin-left: 6px; vertical-align: 1px }
+tbody tr:last-child td { border-bottom: 0 }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 14px; margin-top: 14px }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0 }
+.chart h3 { font-size: 15px; font-weight: 600 }
+.chart p { margin: 2px 0 10px; font-size: 13px; color: var(--muted) }
+.chart svg { width: 100%; height: auto; display: block }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); margin-top: 8px }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px }
+
+.bars { display: grid; gap: 12px }
+.bar-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px }
+.bar-row .lbl { display: flex; justify-content: space-between; gap: 8px; font-size: 13px }
+.bar-row .lbl b { font-variant-numeric: tabular-nums }
+.bar { display: flex; height: 18px; border-radius: 5px; overflow: hidden; background: var(--soft) }
+.bar span { height: 100% }
+
+.disclosure { font-size: 12px; color: var(--muted); line-height: 1.55; border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 8px; max-width: 90ch }
+.disclosure p { margin: 0 }
+.disclosure a { color: var(--brand-deep) }
+@media (prefers-reduced-motion: no-preference) { .bar span { transition: width .25s ease } }
+</style>
+<style>body{margin:0} img{max-width:100%} [hidden]{display:none!important}</style>
+</head>
+<body>
+
+
+<header class="brandbar">
+  <div class="wrap">
+    <div class="logo"><img src="data:image/webp;base64,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" alt="That Mortgage Couple, Xpert Home Lending"></div>
+    <div class="meta" id="brandMeta"><b>Powered by Xpert Home Lending, Inc.</b><br>Company NMLS #2179191 · (303) 931-6776</div>
+  </div>
+</header>
+
+<div class="wrap">
+<main>
+  <div class="intro">
+    <span class="sample">Sample scenarios · not a rate quote</span>
+    <h1>Compare your loan options side by side</h1>
+    <p>Enter up to four loan options. See the monthly payment, cash needed at closing, and what each option really costs over the time you expect to keep it.</p>
+  </div>
+
+  <section>
+    <h2>The home</h2>
+    <div class="panel fields">
+      <label class="f">Purchase price<div class="affix pre"><span>$</span><input id="price" type="number" min="0" step="1000"></div></label>
+      <label class="f">Property taxes / yr<div class="affix pre"><span>$</span><input id="taxes" type="number" min="0" step="100"></div></label>
+      <label class="f">Home insurance / yr<div class="affix pre"><span>$</span><input id="insurance" type="number" min="0" step="100"></div></label>
+      <label class="f">HOA dues / mo<div class="affix pre"><span>$</span><input id="hoa" type="number" min="0" step="10"></div></label>
+      <label class="f">Home value growth / yr<div class="affix"><input id="appreciation" type="number" min="-10" max="15" step="0.5"><span>%</span></div></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Loan options</h2>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section>
+    <div class="results-head">
+      <h2>How they compare</h2>
+      <div><span class="seg-label">Keep the loan for</span><div class="seg" id="horizon" role="group" aria-label="Years you expect to keep the loan"></div></div>
+    </div>
+    <div class="highlights" id="highlights"></div>
+    <div class="table-wrap"><table id="table"></table></div>
+    <div class="charts">
+      <div class="chart"><h3>Monthly payment</h3><p>Principal and interest, mortgage insurance, and taxes, insurance and HOA.</p><div class="bars" id="payChart"></div>
+        <div class="legend"><span><i style="background:var(--brand)"></i>Principal &amp; interest</span><span><i style="background:var(--brand-2)"></i>Mortgage insurance</span><span><i style="background:var(--muted);opacity:.45"></i>Taxes, insurance, HOA</span></div></div>
+      <div class="chart"><h3 id="costTitle">Total cost</h3><p>Points, fees, financed upfront premiums, interest and mortgage insurance paid. Lower is better.</p><div class="bars" id="costBars"></div></div>
+      <div class="chart"><h3>Total cost over time</h3><p>Where the lines cross is the break-even point.</p><div id="costChart"></div><div class="legend" id="lg1"></div></div>
+      <div class="chart"><h3>Home equity over time</h3><p>Estimated home value minus loan balance.</p><div id="equityChart"></div><div class="legend" id="lg2"></div></div>
+    </div>
+  </section>
+
+  <footer class="disclosure">
+    <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
+    <p><strong>For illustration only.</strong> This is not a loan offer, a commitment to lend, or a Loan Estimate. Figures are estimates based on the inputs shown. Actual rates, APRs, fees and payments depend on credit, property, loan amount, occupancy and market conditions, and are subject to underwriting approval. Rates can change daily.</p>
+    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%, VA funding fee 2.15% first use) as finance charges. Conventional PMI is shown until the balance reaches 78% of the purchase price. FHA annual MIP is shown for the life of the loan with less than 10% down, or 11 years otherwise. Cash to close shows down payment, points and lender fees only and excludes third-party costs, prepaids and escrow deposits. Taxes and insurance are estimates.</p>
+    <p id="brandFoot"></p>
+    <p class="links"><a href="https://www.nmlsconsumeraccess.org/" target="_blank" rel="noopener">NMLS Consumer Access</a> · <a href="https://bit.ly/TexasRecoveryFundNotice" target="_blank" rel="noopener">Texas Recovery Fund Notice</a> · <a href="https://www.thatmortgagecouple.com/legal" target="_blank" rel="noopener">Legal</a> · <a href="https://www.thatmortgagecouple.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></p>
+  </footer>
+</main>
+</div>
+
+<script>
+/* ===== BRAND CONFIG: edit to rebrand ===== */
+const BRAND = { name: "That Mortgage Couple", company: "Xpert Home Lending, Inc.", nmls: "Company NMLS #2179191 · Personal NMLS 565968 & 243972", phone: "(303) 931-6776",
+  address: "8375 Willow St Suite 300, Lone Tree, CO 80124" };
+
+const COLORS = ["--s1", "--s2", "--s3", "--s4"];
+const LETTERS = ["A", "B", "C", "D"];
+const HORIZONS = [3, 5, 7, 10, 15, 30];
+const state = {
+  price: 450000, taxes: 5400, insurance: 1500, hoa: 0, appreciation: 3, horizon: 7,
+  scenarios: [
+    { name: "30-yr fixed, no points", type: "conv", term: 30, rate: 6.875, points: 0,    fees: 1495, downPct: 10,  mi: 0.45 },
+    { name: "30-yr fixed, buy down",  type: "conv", term: 30, rate: 6.375, points: 1.5,  fees: 1495, downPct: 10,  mi: 0.45 },
+    { name: "15-yr fixed",            type: "conv", term: 15, rate: 6.125, points: 0,    fees: 1495, downPct: 10,  mi: 0.30 },
+    { name: "FHA 30-yr fixed",        type: "fha",  term: 30, rate: 6.25,  points: 0,    fees: 1495, downPct: 3.5, mi: 0.55 },
+  ]
+};
+
+const $ = (id) => document.getElementById(id);
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const usdK = (v) => Math.abs(v) >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + Math.round(v / 1000) + "k";
+const pct = (v, d = 3) => v.toFixed(d).replace(/0+$/, "").replace(/\.$/, "") + "%";
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const MONTHS = 360;
+
+/* ---------- Finance math ---------- */
+function analyze(s) {
+  const value = state.price;
+  const down = value * s.downPct / 100;
+  const base = Math.max(value - down, 0);
+  const financed = s.type === "fha" ? base * 0.0175 : s.type === "va" ? base * 0.0215 : 0;
+  const loan = base + financed;
+  const n = s.term * 12, r = s.rate / 1200;
+  const pi = loan === 0 ? 0 : r ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n;
+  const pointsCost = loan * s.points / 100;
+  const upfront = pointsCost + s.fees + financed;
+  const miMonths = s.type === "fha" ? (s.downPct < 10 ? n : 132) : n;
+
+  const bal = [loan], cost = [upfront], equity = [value - loan], pay = [];
+  let b = loan, cumInt = 0, cumMI = 0, firstMI = null;
+  for (let m = 1; m <= MONTHS; m++) {
+    let interest = 0, mi = 0, p = 0;
+    if (m <= n && b > 0.005) {
+      interest = b * r;
+      if (s.type === "conv" && s.downPct < 20 && b / value > 0.78) mi = base * s.mi / 1200;
+      if (s.type === "fha" && m <= miMonths) mi = b * s.mi / 1200;
+      p = Math.min(pi - interest, b);
+      b -= p;
+    }
+    if (firstMI === null) firstMI = mi;
+    cumInt += interest; cumMI += mi;
+    if (m <= n) pay.push(pi + mi);
+    bal.push(b); cost.push(upfront + cumInt + cumMI);
+    equity.push(value * Math.pow(1 + state.appreciation / 100, m / 12) - b);
+  }
+  // APR: monthly rate i where PV(payments) = amount financed
+  const amtFin = loan - financed - pointsCost - s.fees;
+  let apr = s.rate;
+  if (amtFin > 0 && pay.length) {
+    const pv = (i) => pay.reduce((acc, x, k) => acc + x / Math.pow(1 + i, k + 1), 0);
+    let lo = 0, hi = 0.05;
+    for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2; pv(mid) > amtFin ? lo = mid : hi = mid; }
+    apr = (lo + hi) / 2 * 1200;
+  }
+  const escrow = state.taxes / 12 + state.insurance / 12 + state.hoa;
+  return { s, down, loan, financed, pi, mi: firstMI || 0, escrow, total: pi + (firstMI || 0) + escrow,
+           pointsCost, cashToClose: down + pointsCost + s.fees, apr, bal, cost, equity, n };
+}
+
+function breakEven(a, base) {
+  if (a === base) return "Baseline";
+  const d0 = a.cost[0] - base.cost[0];
+  if (d0 <= 0) return a.cost[MONTHS] <= base.cost[MONTHS] ? "Costs less from day one" : "Costs less at first";
+  for (let m = 1; m <= MONTHS; m++) if (a.cost[m] <= base.cost[m]) {
+    const y = Math.floor(m / 12), mo = m % 12;
+    return (y ? y + " yr " : "") + (mo ? mo + " mo" : "");
+  }
+  return "Not within 30 yrs";
+}
+
+/* ---------- Inputs ---------- */
+["price", "taxes", "insurance", "hoa", "appreciation"].forEach((k) => {
+  $(k).value = state[k];
+  $(k).addEventListener("input", () => { state[k] = +$(k).value || 0; render(); });
+});
+
+function field(label, key, i, s, opts = {}) {
+  const id = `s${i}-${key}`;
+  if (opts.select) return `<label class="f">${label}<select id="${id}" data-i="${i}" data-k="${key}">${opts.select.map(([v, t]) => `<option value="${v}"${String(s[key]) === String(v) ? " selected" : ""}>${t}</option>`).join("")}</select></label>`;
+  const pre = opts.pre ? `<div class="affix pre"><span>${opts.pre}</span>` : `<div class="affix"><span>${opts.suf || ""}</span>`;
+  return `<label class="f">${label}${pre}<input id="${id}" type="number" step="${opts.step || "any"}" min="0" value="${s[key]}" data-i="${i}" data-k="${key}"></div></label>`;
+}
+
+function renderCards() {
+  const html = state.scenarios.map((s, i) => `
+    <div class="card">
+      <div class="card-head">
+        <span class="tag" style="background:var(${COLORS[i]})">${LETTERS[i]}</span>
+        <input id="s${i}-name" aria-label="Option name" value="${s.name.replace(/"/g, "&quot;")}" data-i="${i}" data-k="name">
+        ${state.scenarios.length > 2 ? `<button class="icon-btn" data-remove="${i}" aria-label="Remove option ${LETTERS[i]}">×</button>` : ""}
+      </div>
+      <div class="fields">
+        ${field("Loan type", "type", i, s, { select: [["conv", "Conv."], ["fha", "FHA"], ["va", "VA"]] })}
+        ${field("Term", "term", i, s, { select: [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"], [10, "10 years"]] })}
+        ${field("Interest rate", "rate", i, s, { suf: "%", step: 0.125 })}
+        ${field("Points", "points", i, s, { suf: "%", step: 0.125 })}
+        ${field("Lender fees", "fees", i, s, { pre: "$", step: 50 })}
+        ${field("Down payment", "downPct", i, s, { suf: "%", step: 0.5 })}
+        ${s.type === "va" ? "" : field(s.type === "fha" ? "Annual MIP" : "PMI rate / yr", "mi", i, s, { suf: "%", step: 0.05 })}
+      </div>
+    </div>`).join("");
+  $("cards").innerHTML = html + (state.scenarios.length < 4 ? `<button class="add" id="addBtn">+ Add an option</button>` : "");
+}
+
+$("cards").addEventListener("input", (e) => {
+  const t = e.target, i = t.dataset.i, k = t.dataset.k;
+  if (i === undefined) return;
+  const s = state.scenarios[i];
+  if (k === "name") s[k] = t.value;
+  else if (k === "type") {
+    s.type = t.value;
+    if (s.type === "fha") { s.mi = 0.55; if (s.downPct < 3.5) s.downPct = 3.5; }
+    if (s.type === "conv") s.mi = 0.45;
+    renderCards();
+  }
+  else if (k === "term") s.term = +t.value;
+  else s[k] = +t.value || 0;
+  render();
+});
+$("cards").addEventListener("click", (e) => {
+  const rm = e.target.closest("[data-remove]");
+  if (rm) { state.scenarios.splice(+rm.dataset.remove, 1); renderCards(); render(); }
+  if (e.target.id === "addBtn") {
+    const last = state.scenarios[state.scenarios.length - 1];
+    state.scenarios.push({ ...last, name: "New option" });
+    renderCards(); render();
+  }
+});
+
+$("horizon").innerHTML = HORIZONS.map((y) => `<button data-y="${y}">${y} yrs</button>`).join("");
+$("horizon").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.horizon = +b.dataset.y; render();
+});
+
+/* ---------- Charts ---------- */
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p;
+  return [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((c) => f <= c) * p;
+}
+function lineChart(el, series, marker) {
+  const W = 640, H = 260, L = 56, R = 14, T = 12, B = 30;
+  const max = niceMax(Math.max(...series.flatMap((s) => s.values)));
+  const min = Math.min(0, ...series.flatMap((s) => s.values));
+  const x = (m) => L + (m / MONTHS) * (W - L - R);
+  const y = (v) => T + (1 - (v - min) / (max - min)) * (H - T - B);
+  const ticks = 4, grid = [];
+  for (let k = 0; k <= ticks; k++) {
+    const v = min + (max - min) * k / ticks;
+    grid.push(`<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/>
+      <text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${usdK(v)}</text>`);
+  }
+  [0, 5, 10, 15, 20, 25, 30].forEach((yr) => grid.push(`<text x="${x(yr * 12)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--muted)">${yr === 0 ? "Today" : yr + " yr"}</text>`));
+  const mk = `<line x1="${x(marker)}" x2="${x(marker)}" y1="${T}" y2="${H - B}" stroke="var(--fg)" stroke-dasharray="3 4" stroke-width="1" opacity=".5"/>`;
+  const lines = series.map((s) => {
+    const d = s.values.map((v, m) => (m % 3 === 0 || m === MONTHS) ? `${m ? "L" : "M"}${x(m).toFixed(1)},${y(v).toFixed(1)}` : "").join("");
+    return `<path d="${d}" fill="none" stroke="var(${s.color})" stroke-width="2.25" stroke-linejoin="round"/>
+      <circle cx="${x(marker)}" cy="${y(s.values[marker])}" r="3.5" fill="var(${s.color})"/>`;
+  }).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Line chart">${grid.join("")}${mk}${lines}</svg>`;
+}
+
+/* ---------- Render ---------- */
+function render() {
+  const res = state.scenarios.map(analyze);
+  const h = state.horizon * 12;
+  const base = res[0];
+  [...$("horizon").children].forEach((b) => b.setAttribute("aria-pressed", +b.dataset.y === state.horizon));
+
+  const minBy = (f) => { let bi = 0; res.forEach((r, i) => { if (f(r) < f(res[bi])) bi = i; }); return bi; };
+  const bCost = minBy((r) => r.cost[h]), bPay = minBy((r) => r.total), bCash = minBy((r) => r.cashToClose);
+  const maxEq = (() => { let bi = 0; res.forEach((r, i) => { if (r.equity[h] > res[bi].equity[h]) bi = i; }); return bi; })();
+  const tagOf = (i) => `<span class="tag" style="background:var(${COLORS[i]})">${LETTERS[i]}</span>`;
+  const hl = (k, i, v, s) => `<div class="hl"><div class="k">${k}</div><div class="v">${tagOf(i)}${v}</div><div class="s">${state.scenarios[i].name}${s ? " · " + s : ""}</div></div>`;
+  const second = [...res].map((r) => r.cost[h]).sort((a, b) => a - b)[1];
+  $("highlights").innerHTML =
+    hl(`Lowest cost over ${state.horizon} yrs`, bCost, usd.format(res[bCost].cost[h]), res.length > 1 ? `saves ${usd.format(second - res[bCost].cost[h])} vs next` : "") +
+    hl("Lowest monthly payment", bPay, usd.format(res[bPay].total), "per month") +
+    hl("Least cash to close", bCash, usd.format(res[bCash].cashToClose), "") +
+    hl(`Most equity at ${state.horizon} yrs`, maxEq, usd.format(res[maxEq].equity[h]), "");
+
+  const row = (label, f, best, cls = "") => `<tr class="${cls}"><td>${label}</td>${res.map((r, i) => `<td class="${best === i ? "best" : ""}">${f(r, i)}</td>`).join("")}</tr>`;
+  const group = (t) => `<tr class="group"><td colspan="${res.length + 1}">${t}</td></tr>`;
+  const typeName = { conv: "Conventional", fha: "FHA", va: "VA" };
+  $("table").innerHTML = `<thead><tr><th></th>${res.map((r, i) => `<th>${tagOf(i)}${r.s.name}</th>`).join("")}</tr></thead><tbody>
+    ${group("Loan")}
+    ${row("Loan type / term", (r) => `${typeName[r.s.type]} · ${r.s.term} yr`)}
+    ${row("Interest rate", (r) => pct(r.s.rate))}
+    ${row("APR (estimated)", (r) => pct(r.apr))}
+    ${row("Loan amount", (r) => usd.format(r.loan) + (r.financed ? `<div style="font-size:12px;color:var(--muted)">incl. ${usd.format(r.financed)} financed</div>` : ""))}
+    ${group("Monthly")}
+    ${row("Principal &amp; interest", (r) => usd.format(r.pi))}
+    ${row("Mortgage insurance", (r) => r.mi ? usd.format(r.mi) : "None")}
+    ${row("Taxes, insurance, HOA", (r) => usd.format(r.escrow))}
+    ${row("Total monthly payment", (r) => usd.format(r.total), bPay, "strong")}
+    ${group("Cash to close")}
+    ${row("Down payment", (r) => `${usd.format(r.down)} <span style="color:var(--muted)">(${pct(r.s.downPct, 2)})</span>`)}
+    ${row("Points", (r) => usd.format(r.pointsCost))}
+    ${row("Lender fees", (r) => usd.format(r.s.fees))}
+    ${row("Estimated cash to close", (r) => usd.format(r.cashToClose), bCash, "strong")}
+    ${group("Over time")}
+    ${row(`Total cost at ${state.horizon} yrs`, (r, i) => usd.format(r.cost[h]) + (i === bCost ? `<span class="pill">Lowest</span>` : ""), bCost, "strong")}
+    ${row("Total cost at 30 yrs", (r) => usd.format(r.cost[MONTHS]))}
+    ${row(`Loan balance at ${state.horizon} yrs`, (r) => usd.format(r.bal[h]))}
+    ${row(`Home equity at ${state.horizon} yrs`, (r) => usd.format(r.equity[h]), maxEq)}
+    ${row(`Break-even vs ${LETTERS[0]}`, (r) => breakEven(r, base))}
+  </tbody>`;
+
+  const maxPay = Math.max(...res.map((r) => r.total));
+  $("payChart").innerHTML = res.map((r, i) => `<div class="bar-row">
+      <div class="lbl"><span>${LETTERS[i]} · ${r.s.name}</span><b>${usd.format(r.total)}</b></div>
+      <div class="bar"><span style="width:${r.pi / maxPay * 100}%;background:var(--brand)"></span><span style="width:${r.mi / maxPay * 100}%;background:var(--brand-2)"></span><span style="width:${r.escrow / maxPay * 100}%;background:var(--muted);opacity:.45"></span></div>
+    </div>`).join("");
+
+  $("costTitle").textContent = `Total cost over ${state.horizon} years`;
+  const maxCost = Math.max(...res.map((r) => r.cost[h]));
+  $("costBars").innerHTML = res.map((r, i) => `<div class="bar-row">
+      <div class="lbl"><span>${LETTERS[i]} · ${r.s.name}${i === bCost ? '<span class="pill">Lowest</span>' : ""}</span><b>${usd.format(r.cost[h])}</b></div>
+      <div class="bar"><span style="width:${r.cost[h] / maxCost * 100}%;background:var(${COLORS[i]})"></span></div>
+    </div>`).join("");
+
+  const legend = res.map((r, i) => `<span><i style="background:var(${COLORS[i]})"></i>${LETTERS[i]} · ${r.s.name}</span>`).join("");
+  lineChart($("costChart"), res.map((r, i) => ({ color: COLORS[i], values: r.cost })), h);
+  lineChart($("equityChart"), res.map((r, i) => ({ color: COLORS[i], values: r.equity })), h);
+  $("lg1").innerHTML = legend; $("lg2").innerHTML = legend;
+}
+
+/* Brand */
+$("brandFoot").textContent = `${BRAND.name}, powered by ${BRAND.company} · ${BRAND.nmls} · ${BRAND.address} · Equal Housing Opportunity.`;
+
+renderCards();
+render();
+</script>
+
+</body>
+</html>
