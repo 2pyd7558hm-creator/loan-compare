@@ -216,6 +216,9 @@ tbody tr:last-child td { border-bottom: 0 }
 </div>
 
 <script>
+// A focused number field changes its value when the mouse wheel turns over it. Let go of the field instead, so the page scrolls and nothing changes.
+document.addEventListener("wheel", (e) => { const t = e.target; if (t instanceof HTMLInputElement && t.type === "number" && document.activeElement === t) t.blur(); }, { passive: true });
+
 /* ===== BRAND CONFIG: edit to rebrand ===== */
 const BRAND = { name: "That Mortgage Couple", company: "Xpert Home Lending, Inc.", nmls: "Company NMLS #2179191 · Personal NMLS 565968 & 243972", phone: "(303) 931-6776",
   address: "8375 Willow St Suite 300, Lone Tree, CO 80124" };
