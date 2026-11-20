@@ -6,44 +6,46 @@
 <meta name="description" content="Compare mortgage options side by side: monthly payment, cash to close, total cost and break-even. From That Mortgage Couple, powered by Xpert Home Lending, Inc.">
 <title>Loan Comparisons | That Mortgage Couple</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: brand bar, inputs strip, scenario cards (A–D), then results: horizon picker, summary table, charts, disclosures. */
 :root {
   /* ===== BRAND TOKENS: swap these for the company's colors ===== */
-  --brand: #1b2a3a;        /* primary: logo navy */
+  /* Apple-like: white and light gray, near-black text, teal as the one accent */
+  --brand: #1d1d1f;        /* primary: near-black */
   --brand-ink: #ffffff;    /* text on primary */
   --brand-2: #3cc0c1;      /* highlight: logo teal (LenderHomePage primary) */
-  --brand-deep: #298283;   /* teal dark enough for text */
+  --brand-deep: #1f7f80;   /* teal dark enough for text and buttons (AA on white) */
   /* Scenario colors A–D */
-  --s1: #1b2a3a; --s2: #3cc0c1; --s3: #567299; --s4: #c98a2e;
-  /* Neutrals (slight teal bias) */
-  --bg: #f4f7f7; --surface: #ffffff; --fg: #1f2937; --muted: #5b6876; --line: #dce4e5; --soft: #ecf2f2;
-  --good: #227a52; --good-bg: #e3f3eb;
-  --font-display: "Lora", Georgia, "Times New Roman", serif;
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --radius: 10px;
+  --s1: #1d1d1f; --s2: #3cc0c1; --s3: #6e7f99; --s4: #c98a2e;
+  /* Neutrals */
+  --bg: #f5f5f7; --surface: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e3e3e8; --soft: #f2f2f5;
+  --good: #1f7a4d; --good-bg: #e6f4ec;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --radius: 14px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --brand: #c9d6e3; --brand-ink: #0f1a24; --brand-2: #3cc0c1; --brand-deep: #75d3d4;
-  --s1: #c9d6e3; --s2: #3cc0c1; --s3: #8399b9; --s4: #e0a54e;
-  --bg: #0e1518; --surface: #162026; --fg: #e5ecee; --muted: #98a8b0; --line: #283840; --soft: #1c2a30;
+  --brand: #f5f5f7; --brand-ink: #1d1d1f; --brand-2: #3cc0c1; --brand-deep: #2a9a9b;
+  --s1: #f5f5f7; --s2: #3cc0c1; --s3: #8399b9; --s4: #e0a54e;
+  --bg: #000000; --surface: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: #38383a; --soft: #2c2c2e;
   --good: #5fd19c; --good-bg: #173326; color-scheme: dark } }
 :root[data-theme="dark"] {
-  --brand: #c9d6e3; --brand-ink: #0f1a24; --brand-2: #3cc0c1; --brand-deep: #75d3d4;
-  --s1: #c9d6e3; --s2: #3cc0c1; --s3: #8399b9; --s4: #e0a54e;
-  --bg: #0e1518; --surface: #162026; --fg: #e5ecee; --muted: #98a8b0; --line: #283840; --soft: #1c2a30;
+  --brand: #f5f5f7; --brand-ink: #1d1d1f; --brand-2: #3cc0c1; --brand-deep: #2a9a9b;
+  --s1: #f5f5f7; --s2: #3cc0c1; --s3: #8399b9; --s4: #e0a54e;
+  --bg: #000000; --surface: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: #38383a; --soft: #2c2c2e;
   --good: #5fd19c; --good-bg: #173326; color-scheme: dark }
 
 * { box-sizing: border-box }
 body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5 }
-h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0 }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.015em }
+body { -webkit-font-smoothing: antialiased }
 .num, td, input[type=number] { font-variant-numeric: tabular-nums }
 .wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
 
 /* Brand bar */
 /* Header stays white in both themes: the logo artwork has a white ground */
-.brandbar { background: #ffffff; color: #1f2937; border-bottom: 4px solid #3cc0c1 }
+.brandbar { background: rgba(255,255,255,.92); color: #1d1d1f; border-bottom: 1px solid #e3e3e8 }
 .brandbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; padding-block: 10px; flex-wrap: wrap }
 .logo img { height: 88px; width: auto; display: block }
 .brandbar .meta { font-size: 13px; color: #4b5563; text-align: right; line-height: 1.45 }
@@ -59,7 +61,7 @@ body { position: relative }
 .sample { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-deep); margin-bottom: 6px }
 
 section > h2 { font-size: 18px; font-weight: 600; margin-bottom: 12px }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04) }
 
 /* Inputs */
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; align-items: start }
@@ -159,7 +161,7 @@ table.fees .affix.pre input { width: 100%; padding-left: 20px }
 .ws h2 { font-size: 18px; font-weight: 600 }
 .ws-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap }
 .ws-top .who { font-size: 13px; color: var(--muted) }
-.btn { font: inherit; font-size: 14px; font-weight: 600; border-radius: 7px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--fg) }
+.btn { font: inherit; font-size: 14px; font-weight: 600; border-radius: 980px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--fg) }
 .btn:hover { border-color: var(--brand-deep) }
 .btn.primary { background: var(--brand-deep); border-color: var(--brand-deep); color: #fff }
 .btn.primary:hover { filter: brightness(1.08) }
@@ -273,9 +275,11 @@ body.readonly .cash-steps, body.readonly .cs-open { display: none }
 .as-head h3 { margin: 0; font-size: 17px }
 .as-head .as-for { font-size: 13px; color: var(--muted); flex: 1 }
 .as-log { display: grid; gap: 8px; max-height: 300px; overflow-y: auto; margin-bottom: 10px; padding: 2px }
-.as-msg { max-width: 82%; padding: 9px 12px; border-radius: 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap }
-.as-msg.a { background: var(--soft); justify-self: start; border-top-left-radius: 4px }
-.as-msg.u { background: var(--brand); color: #fff; justify-self: end; border-top-right-radius: 4px }
+.as-msg { max-width: 82%; padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.45; white-space: pre-wrap }
+.as-msg.a { background: #e9e9eb; color: #1d1d1f; justify-self: start; border-bottom-left-radius: 6px }
+.as-msg.u { background: var(--brand-deep); color: #fff; justify-self: end; border-bottom-right-radius: 6px }
+:root[data-theme="dark"] .as-msg.a { background: #2c2c2e; color: #f5f5f7 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .as-msg.a { background: #2c2c2e; color: #f5f5f7 } }
 .as-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; white-space: normal }
 .as-btns .btn { padding: 5px 10px; font-size: 13px }
 .new-client { width: 100% }
@@ -323,7 +327,7 @@ section[id$="Sec"]:not(#hubSec):not(#homeSec):not([hidden]) { animation: fadein 
 .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0 }
 .switch .sw { width: 36px; height: 22px; border-radius: 99px; background: var(--line); position: relative; transition: background .2s ease; flex: none }
 .switch .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .2s ease }
-.switch input:checked + .sw { background: var(--brand) }
+.switch input:checked + .sw { background: var(--brand-deep) }
 .switch input:checked + .sw::after { transform: translateX(14px) }
 .switch input:focus-visible + .sw { outline: 2px solid var(--brand); outline-offset: 2px }
 .tab-tools .quiet-input { width: 200px; border: 1px solid transparent; background: transparent; padding: 4px 8px; font-size: 13px; border-radius: 7px; transition: border-color .15s ease, background .15s ease }
@@ -1738,7 +1742,7 @@ function asRender() {
   const who = $("cName").value.trim();
   $("asFor").textContent = current || who ? "Working on " + (who || "this comparison") + " · click + New client to start someone else" : "New client";
 }
-function asSay(text, buttons, pending) { const last = asLog[asLog.length - 1]; if (last) last.buttons = null; asLog.push({ who: "a", text, buttons }); asPending = pending || null; asRender(); }
+function asSay(text, buttons, pending) { const last = asLog[asLog.length - 1]; if (last) last.buttons = null; if (asStep) { text = asStep + text; asStep = ""; } asLog.push({ who: "a", text, buttons }); asPending = pending || null; asRender(); }
 function asUser(text) { const last = asLog[asLog.length - 1]; if (last) last.buttons = null; asLog.push({ who: "u", text }); asRender(); }
 function asReset(hello) { asLog = []; asPending = null; asQueue = []; asDeclined = new Set(); if (hello) asLog.push({ who: "a", text: hello }); asRender(); }
 $("asLog").addEventListener("click", (e) => {
@@ -1751,15 +1755,21 @@ function asNext() { asPending = null; const q = asQueue.shift(); if (q) q(); }
 function asAfterDraft(ok) {
   // The assistant asks about the county and the rates itself, so the draft summary leaves those reminders out
   const msg = $("saveStatus").textContent.replace(/ (?:One loan is|Some loans are) over the .*?high balance from jumbo\./, "").replace(/ Rates you didn't type are placeholders, so enter today's pricing/, " Check the pricing"); say("saveStatus", "");
-  if (msg) asSay(msg);
+  // The AI reader's notes go on their own lines instead of running on after the summary
+  if (msg) { const [main, notes] = msg.split(/ AI reader notes: /); asSay(main + (notes ? "\n\nNotes:\n" + notes.split(/(?<=\.)\s+(?=[A-Z])/).map((x) => "• " + x).join("\n") : "")); }
   const info = draftInfo || {}; draftInfo = null; asQueue = [];
   if (ok === false) return;
-  if (info.noPrice) asQueue.push(asAskPrice);
-  if (info.overLimit) asQueue.push(asAskCounty);
-  if (info.guessed && info.guessed.length) asQueue.push(() => asAskRates(info.guessed, info.sample));
+  // What's still missing, as a numbered list; then one question at a time, in the same order
+  const todo = [];
+  if (info.noPrice) todo.push(["Purchase price (I used $450,000 for now)", asAskPrice]);
+  if (info.overLimit) todo.push(["County, since a loan is over the conforming limit (high balance or jumbo?)", asAskCounty]);
+  if (info.guessed && info.guessed.length) todo.push([`Rate${info.guessed.length > 1 ? "s" : ""} for ${info.guessed.map((i) => LETTERS[i]).join(" and ")} (I estimated ${info.guessed.length > 1 ? "them" : "it"})`, () => asAskRates(info.guessed, info.sample)]);
+  if (todo.length > 1) asSay("Still needed:\n\n" + todo.map(([t], i) => `${i + 1}) ${t}`).join("\n\n"));
+  todo.forEach(([, fn], i) => asQueue.push(() => { asStep = todo.length > 1 ? `${i + 1} of ${todo.length}: ` : ""; fn(); asStep = ""; }));
   asQueue.push(asSuggest);
   asNext();
 }
+var asStep = "";
 const compareTab = () => file.calcs.find((c) => c.kind === "compare");
 function toCompare() { const c = compareTab(); if (c && file.active !== c.id) { syncActive(); file.active = c.id; showCalc(); } return c; }
 function asAskPrice() {
@@ -2128,6 +2138,7 @@ function autoTitle(force) {
   const el = $("cTitle"), t = el.value.trim();
   if (titleHand && !force) return;
   if (t && !/^(purchase|refinance) options\b/i.test(t)) return;
+  syncActive();
   const comp = typeof compareTab === "function" ? compareTab() : null, sc = (comp && comp.data && comp.data.scenarios) || state.scenarios || [];
   if (!sc.length) return;
   const refi = /^refinance/i.test(t);
