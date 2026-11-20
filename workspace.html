@@ -63,7 +63,7 @@ section > h2 { font-size: 18px; font-weight: 600; margin-bottom: 12px }
 
 /* Inputs */
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px }
-label.f { display: grid; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--muted) }
+label.f, div.f { display: grid; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--muted) }
 input, select { font: inherit; font-size: 15px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; width: 100%; min-width: 0 }
 input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px }
 .affix { position: relative }
@@ -240,6 +240,14 @@ body.presenting #table td, body.presenting #table th { cursor: cell }
 .fee-empty { margin: 0; font-size: 14px; color: var(--muted) }
 .quick { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap }
 .quick input { flex: 1 1 320px }
+.ai-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap }
+.ai-toggle input { flex: none; width: auto; margin: 0 }
+.ai-ask { border: 1px solid var(--line); border-left: 3px solid var(--accent, #0f766e); border-radius: 8px; padding: 10px 12px; margin: -4px 0 12px }
+.ai-ask p { margin: 0 0 8px; font-weight: 600 }
+.ai-ask .quick { margin: 0 }
+.code-row b { font-size: 16px; letter-spacing: .02em; margin-right: 6px; color: var(--fg) }
+.code-row > div { display: flex; align-items: center; min-height: 40px }
+.ai-note { font-size: 12px; color: var(--muted); margin: -8px 0 12px }
 body.readonly .staff-only, body.readonly .fee-x { display: none }
 body.readonly table.fees input, body.readonly table.fees select { pointer-events: none; background: var(--soft); border-color: transparent }
 /* ===== Calculator hub ===== */
@@ -344,10 +352,17 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
         <div class="panel">
           <form class="quick" id="quickForm">
             <input id="quickIn" type="text" autocomplete="off" aria-label="Quick draft" placeholder="Quick draft: Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA, rent 2400, wait">
-            <button class="btn" type="submit">Draft it</button>
+            <button class="btn" type="submit" id="quickBtn">Draft it</button>
+            <label class="ai-toggle" title="Uses Claude to read the note and ask a question when something is missing"><input type="checkbox" id="aiOn" checked> AI reader</label>
           </form>
+          <div class="ai-ask" id="aiAsk" hidden>
+            <p id="aiQ"></p>
+            <form class="quick" id="aiAnsForm"><input id="aiAns" type="text" autocomplete="off" aria-label="Your answer"><button class="btn primary" type="submit">Answer</button><button class="btn" type="button" id="aiSkip">Skip, just draft it</button></form>
+          </div>
+          <p class="ai-note" id="aiNote">The AI reader gets the note without client names or street addresses. Don't type Social Security, account or income numbers.</p>
           <div class="client-fields">
             <label class="f">Client name(s)<input id="cName" type="text" autocomplete="off" placeholder="e.g. Sam & Alex Ray, or Sam Ray and Alex Jones"></label>
+            <div class="f code-row" id="codeRow" hidden>Client code<div><b id="cCode"></b> <button class="btn" type="button" id="codeCopy">Copy</button></div></div>
             <label class="f wide">Title (client sees this)<input id="cTitle" type="text" placeholder="e.g. Purchase options, 123 Main St"></label>
             <label class="f wide">Private notes (client never sees these)<textarea id="cNotes"></textarea></label>
           </div>
@@ -985,7 +1000,7 @@ renderCards();
 render();
 </script>
 
-<script src="calcs.js"></script>
+<script src="calcs.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 /* ===== Workspace: connects the calculator to Supabase ===== */
@@ -1290,7 +1305,8 @@ function parseOption(sp, base) {
     mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
-function quickDraft(text) {
+// The client, price, state and extras in a note, read by the typed rules (also used to strip names before the AI reader)
+function noteBasics(text) {
   const parts = text.split(/,(?!\d{3})|[;\n]+/).map((x) => x.trim()).filter(Boolean);
   const low = text.toLowerCase();
   let price = null, st = null, name = null;
@@ -1322,19 +1338,25 @@ function quickDraft(text) {
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
     if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
     const q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
-    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
+    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
   }
   if (!st) { const sm = (text.match(/\b[A-Z]{2}\b/g) || []).find((x) => US_STATES.includes(x) && x !== "VA"); if (sm) st = sm; }
   if (!name) {
     const words = text.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "").split(/\s+/), keep = [];
     for (const w of words) {
       const bare = w.replace(/[,;:.]+$/, "");
-      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|investment|investor|rental)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
+      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|investment|investor|rental|county|jumbo|cash)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
       keep.push(bare); if (/[,;]$/.test(w)) break;
     }
     while (keep.length && /^(and|&)$/i.test(keep[keep.length - 1])) keep.pop();
     if (keep.length >= 1 && keep.length <= 6) name = keep.join(" ");
   }
+  return { parts, low, price, st, name, addr, rent, income, extraYearN, extraMonth };
+}
+// ai (from the AI reader): { name, opts: [...] } replaces the rule-read name and options
+function quickDraft(text, ai) {
+  let { parts, low, price, st, name, addr, rent, income, extraYearN, extraMonth } = noteBasics(text);
+  if (ai) { name = ai.name || null; addr = ai.addr || addr; }
   const refi = /\brefi(nance)?\b/.test(low), condo = /\bcondo\b/.test(low);
   let preset = "starter";
   if (/\bpoints?\b|buy ?down/.test(low)) preset = "points";
@@ -1358,12 +1380,12 @@ function quickDraft(text) {
   if (!county) { const cm = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+County\b/); if (cm) county = cm[1]; }
   file.county = county || undefined; file.st = st || undefined;
   // Use the options exactly as typed when there are at least two; otherwise fall back to a common comparison
-  const specs = optionSpecs(text.replace(CASH_RE, " "));
+  const specs = ai && ai.opts ? null : optionSpecs(text.replace(CASH_RE, " "));
   let optText, guessed = false;
   const overLimit = [];
-  if (specs.length >= 2) {
+  if (specs ? specs.length >= 2 : ai.opts.length >= 1) {
     const base = { ...state.scenarios[0] };
-    const opts = specs.map((sp) => parseOption(sp, base));
+    const opts = specs ? specs.map((sp) => parseOption(sp, base)) : ai.opts.map((o) => aiOption(o, base));
     // Conventional loans over the county limit are jumbo (no mortgage insurance); "jumbo" anywhere in the text means all of them
     const allJumbo = /\bjumbo\b/i.test(text) && !opts.some((o) => /\bjumbo\b/i.test(o.src));
     for (const o of opts) {
@@ -1380,6 +1402,8 @@ function quickDraft(text) {
     const amt2 = dm ? parseFloat(dm[1].replace(/,/g, "")) * (dm[2] ? 1000 : 1) : 0;
     const dr = text.match(/\b(?:dpa|assistance|2nd|second)[^.,;]*?\bat\s*(\d+(?:\.\d+)?)\s*%/i);
     opts.forEach((o) => { if (o.bd) o.s.bd = o.bd; if (credit) o.s.credit = Math.round(credit); if (amt2 >= 1000) Object.assign(o.s, { amt2, rate2: dr ? +dr[1] : 0, term2: dr ? 30 : 0 }); });
+    // The AI reader can tie a seller credit or a 2nd loan to one option
+    opts.forEach((o) => { const x = o.ai; if (!x) return; if (x.seller_credit) o.s.credit = Math.round(x.seller_credit); if (x.second_amount >= 1000) Object.assign(o.s, { amt2: Math.round(x.second_amount), rate2: x.second_rate || 0, term2: x.second_rate ? 30 : 0 }); });
     opts.forEach((o) => { if (o.bd) o.s.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.bd]} Buydown`; });
     guessed = opts.some((o) => o.guessed);
     state.scenarios = opts.map((o) => o.s); renderCards(); render();
@@ -1417,7 +1441,7 @@ function quickDraft(text) {
   if (CASH_RE.test(text)) {
     // Compare paying cash with the first financed option
     // Compare with the one financed option typed ("paying cash vs 20% down at 6.5%"), else the first option
-    const s0 = specs.length === 1 ? { ...state.scenarios[0], ...parseOption(specs[0], { ...state.scenarios[0] }).s } : state.scenarios[0], a = analyze(s0);
+    const s0 = specs && specs.length === 1 ? { ...state.scenarios[0], ...parseOption(specs[0], { ...state.scenarios[0] }).s } : state.scenarios[0], a = analyze(s0);
     addCalc("cash", { downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other) }, true); added.push("cost of paying cash");
   }
   if (added.length) drawTabs();
@@ -1425,16 +1449,93 @@ function quickDraft(text) {
   const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
 }
-$("quickForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $("quickIn").value.trim(); if (v) { quickDraft(v); $("quickIn").value = ""; } });
+/* ---- AI reader: Claude reads the note (without names or street addresses) through our Supabase function ---- */
+// Take the client's name, street address and anything like an email, phone or SSN out of the note before it leaves the browser
+function stripNote(text, known) {
+  const { name, addr } = known || noteBasics(text);
+  let note = text;
+  if (addr) note = note.split(addr).join("[street address]");
+  if (name) {
+    note = note.split(name).join("Client A");
+    for (const w of name.split(/\s+|&/).filter((x) => /^[A-Za-z][A-Za-z'-]+$/.test(x) && !/^(and|or)$/i.test(x)))
+      note = note.replace(new RegExp("\\b" + w.replace(/[.'-]/g, "\\$&") + "\\b", "g"), "Client");
+  }
+  note = note.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "[email]").replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[removed]").replace(/\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, "[phone]");
+  return { note, name, addr };
+}
+// One option from the AI reader, built with the same rules (placeholder rate, MI, names) as a typed option
+function aiOption(o, base) {
+  const bd = { 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.buydown];
+  const bits = [o.type || "", o.term ? `${o.term} yr` : "", o.arm ? `${o.arm}/6 ARM` : "fixed", o.points != null ? `${o.points} points` : "",
+    o.down_pct != null ? `${o.down_pct}% down` : "", o.rate ? `at ${o.rate}%` : "", bd ? `${bd} buydown` : ""];
+  const p = parseOption(bits.filter(Boolean).join(" "), base);
+  p.ai = o;
+  return p;
+}
+// Turn the AI reader's fields back into a note the typed rules read exactly, then fill the comparison from it
+function applyAi(job, d) {
+  const n = (v) => String(Math.round(+v));
+  const anyArm = d.options.some((o) => o.arm);
+  const bits = [d.price ? "$" + n(d.price) : "", d.state || "", d.county ? d.county.replace(/\s+county$/i, "") + " County" : "", d.refi ? "refi" : "", d.condo ? "condo" : "",
+    d.jumbo_all ? "jumbo" : "", d.rent ? "rent " + n(d.rent) : "", d.income ? "income " + n(d.income) : "", d.cost_of_waiting ? "wait" : "", d.debts ? "debts" : "",
+    d.extra_payments_per_year ? `${n(d.extra_payments_per_year)} extra payments a year` : d.extra_monthly ? `extra $${n(d.extra_monthly)} a month` : d.extra_payments ? "extra payments" : "",
+    d.arm_vs_fixed || anyArm ? "ARM" : "", d.bid_over_asking ? "over asking" : "", d.equity ? "equity" : "", d.investment ? "investment" : "", d.paying_cash ? "paying cash" : "",
+    d.seller_credit_all ? "seller credit $" + n(d.seller_credit_all) : "", d.dpa_amount ? `DPA $${n(d.dpa_amount)}${d.dpa_rate ? ` at ${d.dpa_rate}%` : ""}` : ""];
+  quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4) });
+  const notes = (d.assumptions || []).filter(Boolean);
+  if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
+}
+let aiJob = null;
+function aiAskDone() { $("aiAsk").hidden = true; aiJob = null; }
+async function runAi(job, final) {
+  $("quickBtn").disabled = true; say("saveStatus", "Reading your note…");
+  let data = null;
+  try {
+    const r = await sb.functions.invoke("draft-reader", { body: { note: job.note, answers: job.answers, final: !!final } });
+    if (!r.error && r.data && !r.data.error) data = r.data;
+  } catch (e) { data = null; }
+  $("quickBtn").disabled = false;
+  if (!data || (data.kind === "draft" && !data.draft) || (data.kind === "question" && !data.question && !data.draft)) {
+    aiAskDone(); quickDraft(job.raw);
+    say("saveStatus", $("saveStatus").textContent + " (The AI reader wasn't available, so the typed rules read this note.)");
+    return;
+  }
+  if (data.kind === "question" && data.question && !final) {
+    aiJob = job; $("aiQ").textContent = data.question; $("aiAns").value = ""; $("aiAsk").hidden = false; $("aiAns").focus();
+    say("saveStatus", "One question before drafting.");
+    return;
+  }
+  aiAskDone();
+  if (!data.draft) { quickDraft(job.raw); return; }
+  applyAi(job, data.draft);
+}
+try { if (localStorage.getItem("aiReader") === "off") $("aiOn").checked = false; } catch (e) { /* storage blocked */ }
+$("aiOn").addEventListener("change", (e) => { try { localStorage.setItem("aiReader", e.target.checked ? "on" : "off"); } catch (err) { /* storage blocked */ } });
+$("quickForm").addEventListener("submit", (e) => {
+  e.preventDefault(); const v = $("quickIn").value.trim(); if (!v) return;
+  $("quickIn").value = ""; aiAskDone();
+  if (!$("aiOn").checked) { quickDraft(v); return; }
+  newComparison(); // clear the last client while the AI reader works, so a question isn't shown over someone else's file
+  const st = stripNote(v);
+  runAi({ raw: v, note: st.note, name: st.name, addr: st.addr, answers: [] });
+});
+$("aiAnsForm").addEventListener("submit", (e) => {
+  e.preventDefault(); const a = $("aiAns").value.trim(); if (!aiJob || !a) return;
+  const job = aiJob; job.answers.push({ q: $("aiQ").textContent, a: stripNote(a, { name: job.name, addr: job.addr }).note });
+  runAi(job);
+});
+$("aiSkip").addEventListener("click", () => { if (aiJob) runAi(aiJob, true); });
 
 async function loadList() {
-  const { data, error } = await sb.from("comparisons").select("id, client_name, title, shared, updated_at").order("updated_at", { ascending: false }).limit(500);
+  // client_code arrives with the 004_client_codes.sql update; until it's run, load the list without it
+  let { data, error } = await sb.from("comparisons").select("id, client_name, client_code, title, shared, updated_at").order("updated_at", { ascending: false }).limit(500);
+  if (error && /client_code/.test(error.message || "")) ({ data, error } = await sb.from("comparisons").select("id, client_name, title, shared, updated_at").order("updated_at", { ascending: false }).limit(500));
   if (error) { $("list").innerHTML = `<div class="empty">Couldn't load clients: ${error.message}</div>`; return; }
   rows = data; drawList();
 }
 function drawList() {
   const q = $("search").value.trim().toLowerCase();
-  const items = rows.filter((r) => !q || (r.client_name + " " + (r.title || "")).toLowerCase().includes(q));
+  const items = rows.filter((r) => !q || (r.client_name + " " + (r.title || "") + " " + (r.client_code || "")).toLowerCase().includes(q));
   $("list").innerHTML = items.length ? items.map((r) => `<button type="button" data-id="${r.id}" aria-current="${current && current.id === r.id}">
       <span class="n"></span><span class="m"></span></button>`).join("") : `<div class="empty">${rows.length ? "No clients match." : "No saved clients yet. Fill in a calculator below and save."}</div>`;
   [...$("list").children].forEach((b, i) => {
@@ -1442,13 +1543,14 @@ function drawList() {
     const r = items[i];
     b.querySelector(".n").textContent = r.client_name;
     if (r.shared) b.querySelector(".n").insertAdjacentHTML("beforeend", '<span class="chip">Shared</span>');
-    b.querySelector(".m").textContent = (r.title ? r.title + " · " : "") + new Date(r.updated_at).toLocaleDateString("en-US");
+    b.querySelector(".m").textContent = (r.client_code ? r.client_code + " · " : "") + (r.title ? r.title + " · " : "") + new Date(r.updated_at).toLocaleDateString("en-US");
   });
 }
 function fillClient(r) {
   $("cName").value = r ? r.client_name : "";
   $("cTitle").value = r ? r.title || "" : ""; $("cNotes").value = r ? r.notes || "" : "";
   $("delBtn").hidden = !r; $("delConfirm").hidden = true; $("shareBox").hidden = !r;
+  $("codeRow").hidden = !(r && r.client_code); $("cCode").textContent = r && r.client_code || "";
   if (r) { $("shareOn").checked = r.shared; $("shareUrl").value = location.origin + location.pathname + "?c=" + r.share_token; $("shareRow").hidden = !r.shared; $("presentRow").hidden = !r.shared; }
   if (!r || !r.shared) stopPresenting();
   say("saveStatus", "");
@@ -1464,6 +1566,8 @@ async function save() {
   const name = $("cName").value.trim();
   if (!name) { say("saveStatus", "Add the client's name first.", true); $("cName").focus(); return; }
   const fields = { client_name: name, title: $("cTitle").value.trim() || null, notes: $("cNotes").value.trim() || null, data: getState() };
+  // A new comparison for a client we already have keeps that client's code, so Surefire matches one code per client
+  if (!current) { const same = rows.find((r) => r.client_code && r.client_name.trim().toLowerCase() === name.toLowerCase()); if (same) fields.client_code = same.client_code; }
   $("saveBtn").disabled = true; say("saveStatus", "Saving…");
   const q = current ? sb.from("comparisons").update(fields).eq("id", current.id) : sb.from("comparisons").insert(fields);
   const { data, error } = await q.select().single();
@@ -1472,6 +1576,7 @@ async function save() {
   current = data; fillClient(data); say("saveStatus", "Saved " + new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
   await loadList();
 }
+$("codeCopy").addEventListener("click", () => copyOut($("cCode").textContent, "Client code copied. Paste it into Surefire."));
 async function setShared(on) {
   if (!current) return;
   const { data, error } = await sb.from("comparisons").update({ shared: on }).eq("id", current.id).select().single();
