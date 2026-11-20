@@ -88,7 +88,10 @@ Deno.serve(async (req) => {
 
   // Signed-in staff only
   const auth = req.headers.get("Authorization") || "";
-  const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
+  if (!/^Bearer\s+\S+/.test(auth)) return reply({ error: "not_signed_in" }, 401);
+  // The project's publishable key is public (it's in the workspace page); the signed-in user's token decides access
+  const publicKey = Deno.env.get("SUPABASE_ANON_KEY") || "sb_publishable_8lBhstmey8uIbNnJelcbqQ_H8WpOHKT";
+  const sb = createClient(Deno.env.get("SUPABASE_URL")!, publicKey, { global: { headers: { Authorization: auth } } });
   const { data: staff, error: staffErr } = await sb.rpc("is_staff");
   if (staffErr || staff !== true) return reply({ error: "not_staff" }, 403);
 
