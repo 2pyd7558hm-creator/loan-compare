@@ -51,6 +51,7 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0 }
 @media (max-width: 520px) { .brandbar .meta { text-align: left } .logo img { height: 60px } }
 
 main { display: grid; gap: 28px; padding-block: 28px 40px }
+main > * { min-width: 0 }
 .intro h1 { font-size: clamp(24px, 4vw, 32px); font-weight: 600 }
 .intro p { color: var(--muted); max-width: 62ch; margin: 6px 0 0 }
 .sample { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-deep); margin-bottom: 6px }
@@ -203,7 +204,22 @@ table.fees input[type=checkbox] { width: auto }
 table.fees td.num, table.fees th.num { text-align: right; white-space: nowrap }
 table.fees tr.tot td { font-weight: 600; border-top: 1px solid var(--line) }
 table.fees .est { font-size: 11px; color: var(--muted); font-weight: 500 }
-.fee-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; margin-top: 10px }
+.fee-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px }
+.fee-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px 16px; flex-wrap: wrap }
+#feeBody:not([hidden]) { margin-top: 12px }
+.tpl-manage { margin-bottom: 12px; display: grid; gap: 8px }
+.tpl-manage .ws-top { display: flex; justify-content: space-between; align-items: center }
+.tpl-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px }
+.tpl-row .st { color: var(--muted); font-size: 12px; min-width: 28px }
+.tpl-row .nm { flex: 1 }
+.tpl-row .rm { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: #b42318; font-size: 18px; line-height: 1; cursor: pointer }
+.tpl-row .rm:hover { background: #fde8e7 }
+.tpl-row .sure { display: flex; gap: 6px; align-items: center; color: #b42318; font-size: 13px }
+.lo-box { position: absolute; z-index: 49; pointer-events: none; border: 3px solid #f59e0b; border-radius: 8px; background: rgba(245,158,11,.14); box-shadow: 0 0 0 6px rgba(245,158,11,.22); transition: opacity .4s }
+body.presenting main table, body.presenting .cards { user-select: none; -webkit-user-select: none }
+body.presenting #table td, body.presenting #table th { cursor: cell }
+.follow { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer }
+.follow input { width: auto; margin: 0 }
 .fee-sum b { font-weight: 600 }
 .fee-empty { margin: 0; font-size: 14px; color: var(--muted) }
 .quick { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap }
@@ -252,7 +268,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     <!-- Client view banner -->
     <div id="vClient" class="client-banner" hidden>
       <div><span class="sample">Prepared for you</span><br><b id="cvName"></b> <span id="cvTitle" style="color:var(--muted)"></span></div>
-      <div style="display:grid;gap:4px;justify-items:end"><span class="live-pill" id="livePill" hidden>Your loan officer is presenting</span><div style="font-size:13px;color:var(--muted)" id="cvDate"></div></div>
+      <div style="display:grid;gap:4px;justify-items:end"><span class="live-pill" id="livePill" hidden>Your loan officer is presenting</span><label class="follow" id="followWrap" hidden><input type="checkbox" id="followOn" checked> Follow along</label><div style="font-size:13px;color:var(--muted)" id="cvDate"></div></div>
     </div>
     <div id="vClientMissing" class="panel login" hidden>
       <h2>This comparison isn't available</h2>
@@ -329,14 +345,26 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
   <section id="closingSec">
     <div class="opts-head">
       <h2>Closing costs</h2>
-      <label class="preset staff-only">Fee template
-        <select id="feeTpl" aria-label="Fill in closing costs from a fee template"><option value="">Choose a fee template…</option></select>
-      </label>
+      <div class="preset staff-only">
+        <label class="preset">Fee template
+          <select id="feeTpl" aria-label="Fill in closing costs from a fee template"><option value="">Choose a fee template…</option></select>
+        </label>
+        <button class="btn link" id="tplManage" type="button">Manage</button>
+      </div>
+    </div>
+    <div class="panel tpl-manage staff-only" id="tplManageBox" hidden>
+      <div class="ws-top"><b>Fee templates</b><button class="btn link" id="tplManageClose" type="button">Done</button></div>
+      <div id="tplList"></div>
+      <div class="status" id="tplManageStatus"></div>
     </div>
     <div class="panel">
       <p class="fee-empty" id="feeEmpty">No itemized closing costs. Choose a fee template to fill them in, or use each option's lender fees.</p>
+      <div class="fee-bar" id="feeBar" hidden>
+        <div class="fee-sum" id="feeSum"></div>
+        <button class="btn" id="feeToggle" type="button" aria-expanded="false">Show all fees</button>
+      </div>
+      <div id="feeBody">
       <div class="table-wrap" id="feeWrap" hidden><table class="fees" id="feeTable"></table></div>
-      <div class="fee-sum" id="feeSum" hidden></div>
       <div class="actions staff-only">
         <button class="btn" id="feeAdd" type="button">+ Add a fee</button>
         <button class="btn" id="feeClear" type="button" hidden>Clear closing costs</button>
@@ -349,6 +377,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
         <button class="btn primary" id="tplSaveBtn" type="button">Save template</button>
         <button class="btn danger" id="tplDelBtn" type="button" hidden>Delete template</button>
         <button class="btn link" id="tplCancel" type="button">Cancel</button>
+      </div>
       </div>
     </div>
   </section>
@@ -681,8 +710,10 @@ const BY = [["B", "Borrower"], ["S", "Seller"], ["L", "Lender"]];
 const escAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 let feeRowsKey = "";
 function renderClosing(a) {
-  const items = state.closing.items, has = items.length > 0;
-  $("feeEmpty").hidden = has; $("feeWrap").hidden = !has; $("feeSum").hidden = !has;
+  const items = state.closing.items, has = items.length > 0, open = !has || !!state.closing.open;
+  $("feeEmpty").hidden = has; $("feeWrap").hidden = !has; $("feeBar").hidden = !has;
+  $("feeBody").hidden = !open;
+  $("feeToggle").textContent = open ? "Hide fees" : `Show all ${items.length} fees`; $("feeToggle").setAttribute("aria-expanded", open);
   $("feeClear").hidden = !has; $("tplSaveOpen").hidden = !has;
   document.getElementById("closingSec").hidden = !has && document.body.classList.contains("readonly");
   if (!has) { feeRowsKey = ""; $("feeTable").innerHTML = ""; return; }
@@ -726,9 +757,11 @@ $("feeTable").addEventListener("click", (e) => {
 $("feeAdd").addEventListener("click", () => {
   if (!hasClosing()) state.scenarios.forEach((s) => s.fees = 0);
   state.closing.items.push({ name: "New fee", amt: 0, pct: 0, by: "B", apr: false, prepaid: false });
+  state.closing.open = true;
   feeRowsKey = ""; renderCards(); render();
   const rows = $("feeTable").querySelectorAll("tbody tr"); const inp = rows[rows.length - 1].querySelector("input"); inp.focus(); inp.select();
 });
+$("feeToggle").addEventListener("click", () => { state.closing.open = !state.closing.open; render(); });
 $("feeClear").addEventListener("click", () => { state.closing = { template: "", items: [] }; renderCards(); render(); });
 function fillFeeTemplateSelect() {
   const sel = $("feeTpl"), states = [...new Set(feeTemplates.map((t) => t.state || "Other"))].sort();
@@ -736,7 +769,7 @@ function fillFeeTemplateSelect() {
     feeTemplates.map((t, i) => (t.state || "Other") === st ? `<option value="${i}">${escAttr(t.name)}</option>` : "").join("") + `</optgroup>`).join("");
 }
 function applyFeeTemplate(t) {
-  state.closing = { template: t.name, items: JSON.parse(JSON.stringify(t.items)) };
+  state.closing = { template: t.name, items: JSON.parse(JSON.stringify(t.items)), open: false };
   state.scenarios.forEach((s) => s.fees = 0); // the template now carries the lender fees
   feeRowsKey = ""; renderCards(); render();
   say("feeStatus", `Filled in from “${t.name}”. Edit any fee for this client; the template itself doesn't change.`);
@@ -825,7 +858,7 @@ let tplFromDb = false;
 async function loadFeeTemplates() {
   const { data, error } = await sb.from("fee_templates").select("id, name, state, items").order("state").order("name");
   if (error || !data) { tplFromDb = false; feeTemplates = DEFAULT_FEE_TEMPLATES.slice(); }
-  else { tplFromDb = true; feeTemplates = data.length ? data : DEFAULT_FEE_TEMPLATES.slice(); }
+  else { tplFromDb = true; feeTemplates = data; }
   fillFeeTemplateSelect();
 }
 $("tplSaveOpen").addEventListener("click", () => {
@@ -856,6 +889,33 @@ $("tplDelBtn").addEventListener("click", async () => {
   if (error) { say("feeStatus", "Template not deleted: " + error.message, true); return; }
   $("tplSaveBox").hidden = true; await loadFeeTemplates();
   say("feeStatus", `Deleted the “${name}” template. This comparison keeps its fees.`);
+});
+
+// Manage: list every template with a remove (–) button and an inline confirm
+function drawTplList() {
+  $("tplList").innerHTML = feeTemplates.length ? feeTemplates.map((t, i) => `<div class="tpl-row" data-t="${i}">
+      <span class="st">${escAttr(t.state || "")}</span><span class="nm">${escAttr(t.name)} <span style="color:var(--muted);font-size:12px">· ${t.items.length} fees</span></span>
+      <button class="rm" type="button" data-rm="${i}" aria-label="Remove ${escAttr(t.name)}" title="Remove template">–</button></div>`).join("")
+    : `<p class="fee-empty">No templates yet. Fill in fees, then use “Save as fee template”.</p>`;
+}
+$("tplManage").addEventListener("click", () => { const box = $("tplManageBox"); box.hidden = !box.hidden; if (!box.hidden) { drawTplList(); say("tplManageStatus", tplFromDb ? "" : "Templates can't be changed right now: the database didn't load them."); } });
+$("tplManageClose").addEventListener("click", () => { $("tplManageBox").hidden = true; });
+$("tplList").addEventListener("click", async (e) => {
+  const rm = e.target.closest("[data-rm]"), yes = e.target.closest("[data-yes]"), no = e.target.closest("[data-no]");
+  if (rm) {
+    const t = feeTemplates[+rm.dataset.rm];
+    rm.outerHTML = `<span class="sure">Remove for everyone? <button class="btn danger" type="button" data-yes="${rm.dataset.rm}">Remove</button><button class="btn link" type="button" data-no>Keep</button></span>`;
+    return;
+  }
+  if (no) { drawTplList(); return; }
+  if (yes) {
+    const t = feeTemplates[+yes.dataset.yes];
+    if (!tplFromDb || !t || !t.id) { say("tplManageStatus", "This template can't be removed right now.", true); return; }
+    const { error } = await sb.from("fee_templates").delete().eq("id", t.id);
+    if (error) { say("tplManageStatus", "Not removed: " + error.message, true); return; }
+    await loadFeeTemplates(); drawTplList();
+    say("tplManageStatus", `Removed “${t.name}”. Comparisons that already used it keep their fees.`);
+  }
 });
 
 /* ---- Quick draft: "Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA" ---- */
@@ -983,14 +1043,14 @@ async function startPresenting() {
   presentCh = channelFor(current.share_token);
   presentCh.on("broadcast", { event: "hello" }, () => sendPresent("state", getState()));
   await new Promise((res) => presentCh.subscribe((st) => { if (st === "SUBSCRIBED") res(); }));
-  presenting = true;
+  presenting = true; document.body.classList.add("presenting");
   $("presentBtn").textContent = "Stop presenting"; $("presentBtn").classList.add("live");
-  say("presentStatus", "Live. Your client sees your changes and pointer.");
+  say("presentStatus", "Live. Your client follows your scrolling and sees your pointer. Click to highlight; click a row name or option heading to highlight the whole row or option, or drag across cells to highlight a group.");
   sendPresent("state", getState());
 }
 function stopPresenting() {
   if (!presentCh) return;
-  sendPresent("end", {}); presenting = false;
+  sendPresent("end", {}); presenting = false; document.body.classList.remove("presenting");
   sb.removeChannel(presentCh); presentCh = null;
   $("presentBtn").textContent = "Present live"; $("presentBtn").classList.remove("live");
   say("presentStatus", "While your client has the link open, they see your changes, your pointer, and anything you click glow.");
@@ -1006,17 +1066,92 @@ mainEl.addEventListener("mousemove", (e) => {
   const t = resolvePath(ref) || e.target, r = t.getBoundingClientRect();
   sendPresent("move", { ref, fx: (e.clientX - r.left) / Math.max(r.width, 1), fy: (e.clientY - r.top) / Math.max(r.height, 1) });
 });
+// Highlights: a single item, or a group of cells in a table (row, option column, or a dragged range)
+function cellPos(td) { const tr = td.parentElement; return { r: [...tr.parentElement.parentElement.rows].indexOf(tr), c: td.cellIndex }; }
+function groupRects(g) {
+  const tbl = resolvePath(g.table); if (!tbl) return null;
+  const rects = [];
+  for (let r = g.r0; r <= g.r1; r++) { const row = tbl.rows[r]; if (!row) continue;
+    for (let c = g.c0; c <= g.c1; c++) { const cell = row.cells[c]; if (cell && !cell.closest("[hidden]")) rects.push(cell.getBoundingClientRect()); } }
+  if (!rects.length) return null;
+  return { el: tbl.rows[g.r0] && tbl.rows[g.r0].cells[g.c0], left: Math.min(...rects.map((x) => x.left)), top: Math.min(...rects.map((x) => x.top)), right: Math.max(...rects.map((x) => x.right)), bottom: Math.max(...rects.map((x) => x.bottom)) };
+}
+let boxEl = null, boxTimer = null, boxGroup = null;
+function placeBox() {
+  if (!boxEl || !boxGroup) return;
+  const u = groupRects(boxGroup); if (!u) { boxEl.hidden = true; return; }
+  Object.assign(boxEl.style, { left: (u.left + scrollX - 4) + "px", top: (u.top + scrollY - 4) + "px", width: (u.right - u.left + 8) + "px", height: (u.bottom - u.top + 8) + "px" });
+  boxEl.hidden = false;
+}
+function showGroup(g, scroll) {
+  if (!boxEl) { boxEl = document.createElement("div"); boxEl.className = "lo-box"; document.body.appendChild(boxEl); }
+  boxGroup = g;
+  const u = groupRects(g); if (!u) return;
+  if (scroll && u.el) {
+    // bring the group into view (both directions, so a phone's sideways-scrolling table follows too)
+    const wrap = u.el.closest(".table-wrap");
+    if (wrap) { const wr = wrap.getBoundingClientRect(); if (u.left < wr.left || u.right > wr.right) wrap.scrollBy({ left: (u.left + u.right) / 2 - (wr.left + wr.right) / 2, behavior: "smooth" }); }
+    if (u.top < 70 || u.bottom > innerHeight - 20) window.scrollBy({ top: (u.top + u.bottom) / 2 - innerHeight / 2, behavior: "smooth" });
+  }
+  placeBox(); setTimeout(placeBox, 450); setTimeout(placeBox, 900);
+  clearTimeout(boxTimer); boxTimer = setTimeout(() => { if (boxEl) boxEl.hidden = true; boxGroup = null; }, 7000);
+}
+window.addEventListener("resize", placeBox);
+document.addEventListener("scroll", placeBox, { capture: true, passive: true });
+
+let dragStart = null, dragged = false;
+mainEl.addEventListener("mousedown", (e) => {
+  if (!presenting) return;
+  const td = e.target.closest("table td, table th"); dragStart = td && !e.target.closest("input, select, button") ? td : null; dragged = false;
+});
+mainEl.addEventListener("mouseup", (e) => {
+  if (!presenting || !dragStart) return;
+  const td = e.target.closest("table td, table th");
+  if (td && td !== dragStart && td.closest("table") === dragStart.closest("table")) {
+    const a = cellPos(dragStart), b = cellPos(td), table = pathOf(td.closest("table"));
+    const g = { table, r0: Math.min(a.r, b.r), r1: Math.max(a.r, b.r), c0: Math.min(a.c, b.c), c1: Math.max(a.c, b.c) };
+    sendPresent("group", g); showGroup(g, false); dragged = true;
+  }
+  dragStart = null;
+});
 mainEl.addEventListener("click", (e) => {
   if (!presenting || e.target.closest("#ws")) return;
+  if (dragged) { dragged = false; return; }
+  const cell = e.target.closest("#table td, #table th");
+  if (cell && !cell.closest("tr.group")) {
+    const tbl = cell.closest("table"), pos = cellPos(cell), table = pathOf(tbl), last = tbl.rows[0].cells.length - 1;
+    let g = null;
+    if (pos.c === 0 && pos.r > 0) g = { table, r0: pos.r, r1: pos.r, c0: 0, c1: last };                 // row name: the whole row
+    else if (pos.r === 0 && pos.c > 0) g = { table, r0: 0, r1: tbl.rows.length - 1, c0: pos.c, c1: pos.c }; // option heading: the whole option
+    if (g) { sendPresent("group", g); showGroup(g, false); return; }
+  }
   const target = e.target.closest("td, th, .hl, .bar-row, .card, .chart, label, button, .panel") || e.target;
   const ref = pathOf(target); if (ref) sendPresent("glow", { ref });
 }, true);
+
+// Scrolling: send what's at the top of the screen so the client's screen (any size) lines up with it
+let lastScroll = 0, scrollTimer = null;
+function sendScroll() {
+  if (!presenting) return;
+  const y = 90, el = document.elementFromPoint(Math.min(innerWidth / 2, 400), y);
+  const anchor = el && el.closest("tr, .card, .chart, .hl, .bar-row, .panel, section, .intro, footer");
+  const ref = anchor && pathOf(anchor); if (!ref) return;
+  const r = anchor.getBoundingClientRect();
+  sendPresent("scroll", { ref, fy: (y - r.top) / Math.max(r.height, 1), top: scrollY < 40 });
+}
+window.addEventListener("scroll", () => {
+  if (!presenting) return;
+  const now = Date.now(); clearTimeout(scrollTimer);
+  if (now - lastScroll > 250) { lastScroll = now; sendScroll(); }
+  scrollTimer = setTimeout(sendScroll, 260);
+}, { passive: true });
 const _render = render;
 render = function () { _render(); if (presenting) { clearTimeout(stateTimer); stateTimer = setTimeout(() => sendPresent("state", getState()), 150); } };
 
 // Client side: follow the presenter
 let pointerEl = null, glowEl = null, glowTimer = null, idleTimer = null;
-function showLive(on) { $("livePill").hidden = !on; if (!on && pointerEl) pointerEl.hidden = true; }
+const following = () => $("followOn").checked;
+function showLive(on) { $("livePill").hidden = !on; $("followWrap").hidden = !on; if (!on && pointerEl) pointerEl.hidden = true; }
 function followPresenter() {
   const ch = channelFor(clientToken);
   ch.on("broadcast", { event: "state" }, ({ payload }) => { setState(payload); showLive(true); })
@@ -1037,10 +1172,19 @@ function followPresenter() {
     .on("broadcast", { event: "glow" }, ({ payload }) => {
       const t = resolvePath(payload.ref); if (!t) return;
       if (glowEl) glowEl.classList.remove("lo-glow");
-      glowEl = t; t.classList.add("lo-glow");
+      glowEl = t; t.classList.add("lo-glow"); showLive(true);
+      const r = t.getBoundingClientRect(), wrap = t.closest(".table-wrap");
+      const offX = wrap && (() => { const w = wrap.getBoundingClientRect(); return r.left < w.left || r.right > w.right; })();
+      if (following() && (r.top < 70 || r.bottom > innerHeight - 20 || offX)) t.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      clearTimeout(glowTimer); glowTimer = setTimeout(() => t.classList.remove("lo-glow"), 6000);
+    })
+    .on("broadcast", { event: "group" }, ({ payload }) => { showLive(true); showGroup(payload, following()); })
+    .on("broadcast", { event: "scroll" }, ({ payload }) => {
+      showLive(true); if (!following()) return;
+      if (payload.top) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+      const t = resolvePath(payload.ref); if (!t) return;
       const r = t.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > innerHeight) t.scrollIntoView({ behavior: "smooth", block: "center" });
-      clearTimeout(glowTimer); glowTimer = setTimeout(() => t.classList.remove("lo-glow"), 4000);
+      window.scrollTo({ top: Math.max(0, r.top + scrollY + payload.fy * r.height - 90), behavior: "smooth" });
     })
     .subscribe((st) => { if (st === "SUBSCRIBED") ch.send({ type: "broadcast", event: "hello", payload: {} }); });
 }

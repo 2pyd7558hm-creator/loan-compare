@@ -51,6 +51,7 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0 }
 @media (max-width: 520px) { .brandbar .meta { text-align: left } .logo img { height: 60px } }
 
 main { display: grid; gap: 28px; padding-block: 28px 40px }
+main > * { min-width: 0 }
 .intro h1 { font-size: clamp(24px, 4vw, 32px); font-weight: 600 }
 .intro p { color: var(--muted); max-width: 62ch; margin: 6px 0 0 }
 .sample { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-deep); margin-bottom: 6px }
