@@ -475,7 +475,238 @@ const AMORT = {
   }
 };
 
-const CALCS = { cow: COW, rvb: RVB, aff: AFF, debt: DEBT, amort: AMORT };
+/* ---------- ARM vs fixed ---------- */
+// Monthly simulation of an ARM: fixed for `fixedYrs`, then the rate moves by up to the caps at each reset and the payment re-amortizes.
+function armRun(d, path) {
+  const n = d.term * 12, step = +d.adjMonths || 12, first = d.fixedYrs * 12;
+  let b = d.loan, rate = +d.armRate, pay = pmt(b, rate, d.term), int = 0, maxPay = pay;
+  const bal = [b], cumInt = [0], rates = [];
+  for (let m = 1; m <= MONTHS; m++) {
+    if (m > first && (m - first - 1) % step === 0 && m <= n) {
+      const resetNo = Math.floor((m - first - 1) / step);
+      const cap = resetNo === 0 ? +d.capFirst : +d.capEach;
+      const ceil = +d.armRate + +d.capLife, floor = Math.max(+d.floor, 0);
+      let target = path === "up" ? ceil : path === "down" ? floor : +d.flatRate;
+      target = Math.min(ceil, Math.max(floor, target));
+      rate = target > rate ? Math.min(target, rate + cap) : Math.max(target, rate - cap);
+      pay = pmt(b, rate, (n - m + 1) / 12); maxPay = Math.max(maxPay, pay);
+    }
+    if (m <= n && b > 0.005) { const i = b * rate / 1200; int += i; b -= Math.min(pay - i, b); }
+    bal.push(b); cumInt.push(int); if (m % 12 === 1) rates.push({ yr: Math.ceil(m / 12), rate, pay });
+  }
+  return { bal, cumInt, rates, maxPay, first: pmt(d.loan, d.armRate, d.term) };
+}
+function fixedRun(d) {
+  const n = d.term * 12, pay = pmt(d.loan, d.fixedRate, d.term), cumInt = [0], bal = [d.loan];
+  let b = d.loan, int = 0;
+  for (let m = 1; m <= MONTHS; m++) { if (m <= n && b > 0.005) { const i = b * d.fixedRate / 1200; int += i; b -= Math.min(pay - i, b); } bal.push(b); cumInt.push(int); }
+  return { pay, cumInt, bal };
+}
+const ARM = {
+  label: "ARM vs fixed", tag: "ARM vs fixed",
+  title: () => "Adjustable rate vs fixed rate",
+  intro: () => "An adjustable-rate loan starts lower and is fixed for a set number of years, then can move up or down within limits. This compares it with a fixed rate if rates rise as far as allowed, stay level, or fall.",
+  note: "ARM vs fixed assumes the ARM rate moves at each reset by no more than its caps, toward the scenario chosen: up to its lifetime cap, to the level rate shown, or down to the lowest rate shown. Actual ARM rates follow an index plus a margin. Interest shown is principal and interest only.",
+  blank: (b) => ({ loan: b.price ? Math.round(b.price * (1 - (b.downPct ?? 10) / 100)) : 400000, term: 30, fixedRate: b.rate || 6.75,
+    armRate: +((b.rate || 6.75) - 0.75).toFixed(3), fixedYrs: 7, adjMonths: 6, capFirst: 5, capEach: 1, capLife: 5,
+    flatRate: b.rate || 6.75, floor: 3, years: 7 }),
+  mount(sec, d, changed) {
+    sec.innerHTML = `
+      <div class="calc-head"><h2>The two loans</h2></div>
+      <div class="panel fields calc-in" id="armIn">
+        ${numIn("Loan amount", "loan", d, { pre: "$", step: 1000 })}
+        ${selIn("Term", "term", d, [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"]])}
+        ${numIn("Fixed rate", "fixedRate", d, { suf: "%", step: 0.125 })}
+        ${numIn("ARM starting rate", "armRate", d, { suf: "%", step: 0.125 })}
+        ${selIn("ARM fixed for", "fixedYrs", d, [[3, "3 years"], [5, "5 years"], [7, "7 years"], [10, "10 years"]])}
+        ${selIn("Then adjusts every", "adjMonths", d, [[6, "6 months"], [12, "year"]])}
+        ${numIn("First change cap", "capFirst", d, { suf: "%", step: 0.5 })}
+        ${numIn("Later change cap", "capEach", d, { suf: "%", step: 0.5 })}
+        ${numIn("Lifetime cap", "capLife", d, { suf: "%", step: 0.5 })}
+        ${numIn("If rates stay level, ARM resets to", "flatRate", d, { suf: "%", step: 0.125 })}
+        ${numIn("Lowest the ARM can go", "floor", d, { suf: "%", step: 0.125 })}
+      </div>
+      <div class="results-head"><h2 id="armH">Keeping the loan</h2><div><span class="seg-label">Keep the loan for</span>${segIn("years", d, [3, 5, 7, 10, 15, 30], "yrs")}</div></div>
+      <div class="highlights" id="armHl"></div>
+      <div class="table-wrap"><table id="armTable"></table></div>
+      <div class="charts one"><div class="chart"><h3>Interest paid over time</h3><p>Where an ARM line crosses the fixed line, the ARM has cost more from then on.</p><div id="armChart"></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Fixed</span><span><i style="background:var(--s4)"></i>ARM, rates rise</span><span><i style="background:var(--s3)"></i>ARM, rates level</span><span><i style="background:var(--s2)"></i>ARM, rates fall</span></div></div></div>`;
+    const compute = () => {
+      const f = fixedRun(d), up = armRun(d, "up"), flat = armRun(d, "flat"), dn = armRun(d, "down"), h = d.years * 12, fp = d.fixedYrs * 12;
+      sec.querySelector("#armH").textContent = `Keeping the loan ${d.years} years`;
+      const saveFixed = (f.pay - up.first) * Math.min(h, fp);
+      let cross = null; for (let m = 1; m <= MONTHS; m++) if (up.cumInt[m] > f.cumInt[m]) { cross = m; break; }
+      sec.querySelector("#armHl").innerHTML =
+        hlBox("ARM payment, first years", usd.format(up.first), `vs ${usd.format(f.pay)} fixed · ${usd.format(f.pay - up.first)}/mo less for ${d.fixedYrs} yrs`, "good") +
+        hlBox(`Saved in ${Math.min(d.years, d.fixedYrs)} yrs before any change`, usd.format(saveFixed), "lower payments while the ARM rate is fixed") +
+        hlBox("Highest ARM payment", usd.format(up.maxPay), `if rates rise as far as the caps allow (${pct(+d.armRate + +d.capLife)})`) +
+        hlBox("Worst case costs more after", cross ? yrsMo(cross) : "Never", "when total ARM interest passes the fixed loan's");
+      const row = (l, f2, cls = "") => `<tr class="${cls}"><td>${l}</td>${[f, up, flat, dn].map((x, i) => `<td>${f2(x, i)}</td>`).join("")}</tr>`;
+      const intAt = (x) => x.cumInt[h], best = Math.min(...[f, up, flat, dn].map(intAt));
+      sec.querySelector("#armTable").innerHTML = `<thead><tr><th></th><th>Fixed ${pct(+d.fixedRate)}</th><th>ARM, rates rise</th><th>ARM, rates level</th><th>ARM, rates fall</th></tr></thead><tbody>
+        ${row("Payment, first years", (x, i) => usd.format(i ? x.first : x.pay))}
+        ${row(`Rate in year ${Math.min(d.years, d.term)}`, (x, i) => i ? pct(x.rates[Math.min(d.years, d.term) - 1].rate) : pct(+d.fixedRate))}
+        ${row(`Payment in year ${Math.min(d.years, d.term)}`, (x, i) => usd.format(i ? x.rates[Math.min(d.years, d.term) - 1].pay : x.pay))}
+        ${row(`Interest paid in ${d.years} yrs`, (x) => usd.format(intAt(x)), "strong")}
+        ${row(`vs fixed`, (x, i) => i ? (intAt(x) <= intAt(f) ? "−" : "+") + usd.format(Math.abs(intAt(x) - intAt(f))) : "–")}
+        ${row(`Balance at ${d.years} yrs`, (x) => usd.format(x.bal[h]))}</tbody>`;
+      [...sec.querySelectorAll("#armTable tbody tr:nth-child(4) td")].slice(1).forEach((td, i) => { if (intAt([f, up, flat, dn][i]) === best) td.classList.add("best"); });
+      lineChart(sec.querySelector("#armChart"), [{ color: "--s1", values: f.cumInt }, { color: "--s4", values: up.cumInt }, { color: "--s3", values: flat.cumInt }, { color: "--s2", values: dn.cumInt }], h);
+    };
+    wireCalc(sec, d, compute, changed);
+  }
+};
+
+/* ---------- Equity and appreciation, with bid-over-asking ---------- */
+const EQUITY = {
+  label: "Equity & appreciation", tag: "Equity & appreciation",
+  title: (d) => d.mode === "bid" ? "Offering over asking: when it pays for itself" : "The wealth a home can build",
+  intro: (d) => d.mode === "bid"
+    ? "If the home keeps gaining value, the extra you offer over asking is earned back over time. This shows how long that takes and what the extra adds to your payment."
+    : "Your equity grows three ways: the down payment you start with, the loan you pay down each month, and the home's value going up. This shows each one year by year.",
+  note: "Equity and appreciation assume home values grow at the rate shown each year. Equity is estimated value minus loan balance and does not include selling costs.",
+  blank: (b) => ({ mode: "equity", st: b.st || DEFAULT_STATE, apprSrc: DEFAULT_SRC, appr: 3, price: b.price || 450000, downPct: b.downPct ?? 10,
+    rate: b.rate || 6.5, term: 30, years: 10, asking: b.price || 450000, over: 15000, value: b.price || 450000 }),
+  mount(sec, d, changed) {
+    const bid = d.mode === "bid";
+    sec.innerHTML = `
+      <div class="calc-head"><h2>${bid ? "The offer" : "The home and loan"}</h2>
+        <div class="seg staff-only" id="eqMode" role="group"><button type="button" data-m="equity" aria-pressed="${!bid}">Equity over time</button><button type="button" data-m="bid" aria-pressed="${bid}">Bid over asking</button></div></div>
+      <div class="panel fields calc-in" id="eqIn">${bid ? `
+        ${numIn("Asking price", "asking", d, { pre: "$", step: 1000 })}
+        ${numIn("Offer over asking", "over", d, { pre: "$", step: 1000 })}
+        ${numIn("What it's worth today", "value", d, { pre: "$", step: 1000 })}` : `
+        ${numIn("Home price", "price", d, { pre: "$", step: 1000 })}`}
+        ${numIn("Down payment", "downPct", d, { suf: "%", step: 0.5 })}
+        ${numIn("Interest rate", "rate", d, { suf: "%", step: 0.125 })}
+        ${selIn("Term", "term", d, [[30, "30 years"], [20, "20 years"], [15, "15 years"]])}
+        ${stateSel(d)}${apprIn(d)}
+      </div>
+      <div class="results-head"><h2 id="eqH"></h2>${bid ? "" : `<div><span class="seg-label">Show</span>${segIn("years", d, [5, 10, 15, 30], "yrs")}</div>`}</div>
+      <div class="highlights" id="eqHl"></div>
+      ${bid ? `<div class="table-wrap"><table id="eqTable"></table></div>` : `
+      <div class="charts one"><div class="chart"><h3>Where your equity comes from</h3><p>Each line adds one source on top of the one below it. The gap between the top two lines is value growth.</p><div id="eqChart"></div>
+        <div class="legend"><span><i style="background:var(--s2)"></i>Total equity</span><span><i style="background:var(--s3)"></i>Down payment + loan paid down</span><span><i style="background:var(--s1)"></i>Down payment</span></div></div></div>
+      <div class="table-wrap"><table id="eqTable"></table></div>`}`;
+    sec.querySelector("#eqMode").onclick = (e) => { const b = e.target.closest("[data-m]"); if (!b || b.dataset.m === d.mode) return; d.mode = b.dataset.m; EQUITY.mount(sec, d, changed); changed(); };
+    const compute = () => {
+      const g = apprOf(d) / 100, dp = (+d.downPct || 0) / 100;
+      if (d.mode === "bid") {
+        const paid = +d.asking + +d.over, gap = paid - d.value;
+        let m = 0; if (gap > 0) { m = g > 0 ? Math.ceil(Math.log(paid / d.value) / Math.log(1 + g) * 12) : Infinity; }
+        const extraPI = pmt(d.over * (1 - dp), d.rate, d.term);
+        sec.querySelector("#eqH").textContent = `Paying ${usd.format(paid)}`;
+        sec.querySelector("#eqHl").innerHTML =
+          hlBox("Earned back in", gap <= 0 ? "Right away" : yrsMo(m), gap <= 0 ? "the offer is at or below today's value" : `at ${pct(apprOf(d), 2)} a year in value growth`, "good") +
+          hlBox("Extra cash at closing", usd.format(d.over * dp), `${pct(+d.downPct, 2)} down on the extra ${usd.format(+d.over)}`) +
+          hlBox("Extra monthly payment", usd.format(extraPI), "principal and interest on the extra") +
+          hlBox("Value in 5 years", usd.format(d.value * Math.pow(1 + g, 5)), `vs ${usd.format(paid)} paid`);
+        const yrs = [1, 2, 3, 5, 7, 10];
+        sec.querySelector("#eqTable").innerHTML = `<thead><tr><th>Year</th><th>Estimated value</th><th>vs price paid</th></tr></thead><tbody>` +
+          yrs.map((y) => { const v = d.value * Math.pow(1 + g, y); return `<tr><td>${y}</td><td>${usd.format(v)}</td><td class="${v >= paid ? "best" : ""}">${v >= paid ? "+" : "−"}${usd.format(Math.abs(v - paid))}</td></tr>`; }).join("") +
+          `<tr><td>Home value growth</td><td colspan="2">${apprLabel(d)}</td></tr></tbody>`;
+        return;
+      }
+      const loan = d.price * (1 - dp), down = d.price * dp, H = d.years;
+      const rows = [], s1 = [down], s2 = [down], s3 = [down];
+      for (let m = 1; m <= MONTHS; m++) {
+        const b = balAfter(loan, d.rate, d.term, Math.min(m, d.term * 12)), v = d.price * Math.pow(1 + g, m / 12);
+        s1.push(down); s2.push(down + (loan - b)); s3.push(down + (loan - b) + (v - d.price));
+        if (m % 12 === 0 && m / 12 <= H) rows.push({ y: m / 12, v, b, paid: loan - b, gain: v - d.price, eq: v - b });
+      }
+      const last = rows[rows.length - 1];
+      sec.querySelector("#eqH").textContent = `After ${H} years`;
+      sec.querySelector("#eqHl").innerHTML =
+        hlBox("Home equity", usd.format(last.eq), `home worth ${usd.format(last.v)}`, "good") +
+        hlBox("From value growth", usd.format(last.gain), apprLabel(d)) +
+        hlBox("From loan paid down", usd.format(last.paid), `loan ${usd.format(loan)} → ${usd.format(last.b)}`) +
+        hlBox("From down payment", usd.format(down), pct(+d.downPct, 2) + " down");
+      lineChart(sec.querySelector("#eqChart"), [{ color: "--s2", values: s3 }, { color: "--s3", values: s2 }, { color: "--s1", values: s1 }], H * 12);
+      sec.querySelector("#eqTable").innerHTML = `<thead><tr><th>Year</th><th>Estimated value</th><th>Loan balance</th><th>Loan paid down</th><th>Value growth</th><th>Equity</th></tr></thead><tbody>` +
+        rows.map((r) => `<tr><td>${r.y}</td><td>${usd.format(r.v)}</td><td>${usd.format(r.b)}</td><td>${usd.format(r.paid)}</td><td>${usd.format(r.gain)}</td><td><b>${usd.format(r.eq)}</b></td></tr>`).join("") + `</tbody>`;
+    };
+    wireCalc(sec, d, compute, changed);
+  }
+};
+
+/* ---------- Investment property ---------- */
+const INVEST = {
+  label: "Investment property", tag: "Investment property",
+  title: () => "What a rental could earn",
+  intro: () => "Rent in, expenses and the mortgage out: the monthly cash flow, the standard investor measures, and the total return over the years you hold it.",
+  note: "Investment property figures are estimates. Vacancy, management, repairs and capital reserves are a percent of rent; taxes, insurance and HOA grow with the home's value and rent grows at the rate shown. Total return is cash flow plus equity minus the cash you put in, before taxes and selling costs.",
+  blank: (b) => ({ st: b.st || DEFAULT_STATE, apprSrc: DEFAULT_SRC, appr: 3, price: b.price || 400000, downPct: 25, rate: +((b.rate || 6.75) + 0.625).toFixed(3), term: 30,
+    closingPct: 3, rehab: 0, rent: Math.round((b.price || 400000) * 0.007 / 50) * 50, other: 0, vacancy: 5, mgmt: 8, repairs: 5, capex: 5, taxes: b.taxes ?? 3600, insurance: 1800, hoa: 0, rentGrowth: 3, years: 10 }),
+  mount(sec, d, changed) {
+    sec.innerHTML = `
+      <div class="calc-head"><h2>Purchase and financing</h2></div>
+      <div class="panel fields calc-in" id="ivBuy">
+        ${numIn("Price", "price", d, { pre: "$", step: 1000 })}
+        ${numIn("Down payment", "downPct", d, { suf: "%", step: 1 })}
+        ${numIn("Interest rate", "rate", d, { suf: "%", step: 0.125 })}
+        ${selIn("Term", "term", d, [[30, "30 years"], [20, "20 years"], [15, "15 years"]])}
+        ${numIn("Closing costs", "closingPct", d, { suf: "% of price", step: 0.5 })}
+        ${numIn("Repairs before renting", "rehab", d, { pre: "$", step: 500 })}
+      </div>
+      <div class="calc-head"><h2>Income and expenses</h2></div>
+      <div class="panel fields calc-in" id="ivOps">
+        ${numIn("Rent / mo", "rent", d, { pre: "$", step: 50 })}
+        ${numIn("Other income / mo", "other", d, { pre: "$", step: 25 })}
+        ${numIn("Vacancy", "vacancy", d, { suf: "% of rent", step: 1 })}
+        ${numIn("Property management", "mgmt", d, { suf: "% of rent", step: 1 })}
+        ${numIn("Repairs", "repairs", d, { suf: "% of rent", step: 1 })}
+        ${numIn("Big-ticket reserves", "capex", d, { suf: "% of rent", step: 1 })}
+        ${numIn("Property taxes / yr", "taxes", d, { pre: "$", step: 100 })}
+        ${numIn("Insurance / yr", "insurance", d, { pre: "$", step: 100 })}
+        ${numIn("HOA / mo", "hoa", d, { pre: "$", step: 10 })}
+        ${numIn("Rent increase / yr", "rentGrowth", d, { suf: "%", step: 0.5 })}
+        ${stateSel(d)}${apprIn(d)}
+      </div>
+      <div class="results-head"><h2>First year</h2></div>
+      <div class="highlights" id="ivHl"></div>
+      <div class="table-wrap"><table id="ivTable"></table></div>
+      <div class="results-head"><h2 id="ivH"></h2><div><span class="seg-label">Hold for</span>${segIn("years", d, [5, 10, 15, 30], "yrs")}</div></div>
+      <div class="highlights" id="ivHold"></div>`;
+    const compute = () => {
+      const g = apprOf(d) / 100, rg = d.rentGrowth / 100, dp = d.downPct / 100, loan = d.price * (1 - dp), pi = pmt(loan, d.rate, d.term);
+      const cash = d.price * dp + d.price * d.closingPct / 100 + (+d.rehab || 0);
+      const yearOf = (y) => {
+        const rent = (d.rent + (+d.other || 0)) * 12 * Math.pow(1 + rg, y - 1), grow = Math.pow(1 + g, y - 1);
+        const vac = rent * d.vacancy / 100, ops = rent * (d.mgmt + d.repairs + d.capex) / 100, fixed = (d.taxes + d.insurance) * grow + d.hoa * 12;
+        const noi = rent - vac - ops - fixed, debt = y <= d.term ? pi * 12 : 0;
+        return { rent, vac, ops, fixed, noi, debt, cf: noi - debt };
+      };
+      const y1 = yearOf(1), cap = y1.noi / d.price * 100, coc = cash ? y1.cf / cash * 100 : 0, dscr = y1.debt ? y1.noi / y1.debt : 0;
+      sec.querySelector("#ivHl").innerHTML =
+        hlBox("Monthly cash flow", (y1.cf < 0 ? "−" : "") + usd.format(Math.abs(y1.cf / 12)), "after the mortgage and all expenses", y1.cf >= 0 ? "good" : "") +
+        hlBox("Cash-on-cash return", pct(coc, 1), `on ${usd.format(cash)} put in`) +
+        hlBox("Cap rate", pct(cap, 2), "net operating income ÷ price") +
+        hlBox("Debt coverage", dscr ? dscr.toFixed(2) + "×" : "–", dscr && dscr < 1.0 ? '<span class="pill warn">rent doesn\'t cover the loan</span>' : dscr && dscr < 1.2 ? "many lenders look for 1.2× or more" : "rent covers the loan payment");
+      const row = (l, a, b, cls = "") => `<tr class="${cls}"><td>${l}</td><td>${a}</td><td>${b}</td></tr>`;
+      sec.querySelector("#ivTable").innerHTML = `<thead><tr><th></th><th>Per month</th><th>Per year</th></tr></thead><tbody>
+        ${row("Rent and other income", usd.format(y1.rent / 12), usd.format(y1.rent))}
+        ${row("Vacancy", "−" + usd.format(y1.vac / 12), "−" + usd.format(y1.vac))}
+        ${row("Management, repairs, reserves", "−" + usd.format(y1.ops / 12), "−" + usd.format(y1.ops))}
+        ${row("Taxes, insurance, HOA", "−" + usd.format(y1.fixed / 12), "−" + usd.format(y1.fixed))}
+        ${row("Net operating income", usd.format(y1.noi / 12), usd.format(y1.noi), "strong")}
+        ${row(`Mortgage (${pct(+d.rate)}, ${usd.format(loan)})`, "−" + usd.format(pi), "−" + usd.format(pi * 12))}
+        ${row("Cash flow", (y1.cf < 0 ? "−" : "") + usd.format(Math.abs(y1.cf / 12)), (y1.cf < 0 ? "−" : "") + usd.format(Math.abs(y1.cf)), "strong")}
+        ${row("Cash put in", "", `${usd.format(cash)} <span class="est">down, closing, repairs</span>`)}</tbody>`;
+      let cfSum = 0; for (let y = 1; y <= d.years; y++) cfSum += yearOf(y).cf;
+      const v = d.price * Math.pow(1 + g, d.years), b = balAfter(loan, d.rate, d.term, Math.min(d.years, d.term) * 12), eq = v - b, total = cfSum + eq - cash;
+      const ann = cash > 0 && cash + total > 0 ? (Math.pow((cash + total) / cash, 1 / d.years) - 1) * 100 : null;
+      sec.querySelector("#ivH").textContent = `Holding ${d.years} years`;
+      sec.querySelector("#ivHold").innerHTML =
+        hlBox("Total return", (total < 0 ? "−" : "") + usd.format(Math.abs(total)), `cash flow + equity − cash put in`, total >= 0 ? "good" : "") +
+        hlBox("Cash flow, all years", (cfSum < 0 ? "−" : "") + usd.format(Math.abs(cfSum)), `rent rising ${pct(+d.rentGrowth, 1)} a year`) +
+        hlBox("Equity", usd.format(eq), `worth ${usd.format(v)}, loan ${usd.format(b)}`) +
+        hlBox("Average yearly return", ann === null ? "–" : pct(ann, 1), "on the cash put in, compounded");
+    };
+    wireCalc(sec, d, compute, changed);
+  }
+};
+
+const CALCS = { cow: COW, rvb: RVB, aff: AFF, debt: DEBT, amort: AMORT, arm: ARM, equity: EQUITY, invest: INVEST };
 // Shown as bubbles. Calculators without a module yet show as "coming soon".
 const BUBBLES = [["compare", "Loan comparison"], ["cow", "Cost of waiting"], ["rvb", "Rent vs buy"], ["aff", "Affordability"],
   ["debt", "Debt consolidation"], ["amort", "Extra payments"], ["arm", "ARM vs fixed"], ["equity", "Equity & appreciation"], ["invest", "Investment property"]];

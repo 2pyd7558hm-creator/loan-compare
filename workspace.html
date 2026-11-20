@@ -476,6 +476,9 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
   <section id="affSec" class="calc-pane" hidden></section>
   <section id="debtSec" class="calc-pane" hidden></section>
   <section id="amortSec" class="calc-pane" hidden></section>
+  <section id="armSec" class="calc-pane" hidden></section>
+  <section id="equitySec" class="calc-pane" hidden></section>
+  <section id="investSec" class="calc-pane" hidden></section>
 
   <footer class="disclosure">
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
@@ -1161,14 +1164,14 @@ function quickDraft(text) {
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
     if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
     const q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
-    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford|debt|debts|consolidate|consolidation|extra)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
+    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
   }
   if (!st) { const sm = (text.match(/\b[A-Z]{2}\b/g) || []).find((x) => US_STATES.includes(x) && x !== "VA"); if (sm) st = sm; }
   if (!name) {
     const words = text.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "").split(/\s+/), keep = [];
     for (const w of words) {
       const bare = w.replace(/[,;:.]+$/, "");
-      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
+      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|investment|investor|rental)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
       keep.push(bare); if (/[,;]$/.test(w)) break;
     }
     while (keep.length && /^(and|&)$/i.test(keep[keep.length - 1])) keep.pop();
@@ -1213,6 +1216,10 @@ function quickDraft(text) {
   if (income || /\bafford/i.test(text)) { addCalc("aff", income ? { income } : null, true); added.push("affordability"); }
   if (/\bdebts?\b|consolidat/i.test(text)) { addCalc("debt", null, true); added.push("debt consolidation"); }
   if (/\bextra\b|pay ?off (early|faster|sooner)/i.test(text)) { addCalc("amort", null, true); added.push("extra payments"); }
+  if (/\barm\b|adjustable/i.test(text)) { addCalc("arm", null, true); added.push("ARM vs fixed"); }
+  if (/over ?ask|\bbid\b/i.test(text)) { addCalc("equity", { mode: "bid" }, true); added.push("bid over asking"); }
+  else if (/\bequity\b|apprec/i.test(text)) { addCalc("equity", null, true); added.push("equity & appreciation"); }
+  if (/\binvest(ment|or)?\b|\brental\b/i.test(text)) { addCalc("invest", null, true); added.push("investment property"); }
   if (added.length) drawTabs();
   const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");

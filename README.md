@@ -6,7 +6,7 @@ Side-by-side mortgage comparisons for That Mortgage Couple, powered by Xpert Hom
 | --- | --- |
 | `index.html` | Public calculator. Nothing is saved. Can also be pasted into a LenderHomePage custom-code page. |
 | `workspace.html` | Loan officer workspace: sign in, save a client with several calculator tabs, turn on a private read-only client link (`workspace.html?c=<token>`, or `&t=<tab id>` to open one tab). |
-| `calcs.js` | The hub's calculators beyond the loan comparison: cost of waiting (purchase and refinance), rent vs buy, affordability, debt consolidation (with blended rate), extra payments. Also the FHFA state home price figures. |
+| `calcs.js` | The hub's calculators beyond the loan comparison: cost of waiting (purchase and refinance), rent vs buy, affordability, debt consolidation (with blended rate), extra payments, ARM vs fixed, equity & appreciation (with bid over asking), investment property. Also the FHFA state home price figures. |
 | `supabase/001_schema.sql` | Database tables and row-level security rules (already applied to the Supabase project). |
 | `supabase/002_fee_templates.sql` | Shared closing-cost (fee) templates, with the starting templates copied from the team's existing ones. |
 | `supabase/003_hub_tabs.sql` | Client link returns only the tabs marked "Borrower sees this tab". Run once in the SQL editor. |
