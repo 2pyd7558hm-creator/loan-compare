@@ -42,6 +42,7 @@
     C("Leo Messi 499,900 CO 5% down 30y 6.625", { name: "Leo Messi", price: 499900, opts: [o("conv", 30, 6.625, 5)] }),
     C("Cost of waiting for Ann Perkins, 400k CO conv 5% down 6.5, rates might drop or prices go up", { name: "Ann Perkins", price: 400000, calcs: ["cow"] }),
     C("debt consolidation refi for Ron Swanson, home value 600k, owes 300k at 3.5%, credit cards 40k", { name: "Ron Swanson", refi: true, calcs: ["debt"], loans: [340000, 340000] }),
+    C(["Refi for Ann Perkins, home worth 500k", "320k and a 45k HELOC"], { name: "Ann Perkins", refi: true, loans: [365000, 365000] }),
     C("Investment property for April Ludgate 550k CO 25% down 7.5 rent 3,200", { name: "April Ludgate", price: 550000, calcs: ["invest"] }),
     C("Andy Dwyer 500k CO 7/6 ARM 6.0 vs 30 fixed 6.75 10% down, show ARM vs fixed", { name: "Andy Dwyer", opts: [o("conv", 30, 6, 10, { arm: 7 }), o("conv", 30, 6.75, 10, { arm: 0 })], calcs: ["arm"] }),
     C("Leslie Knope 475k CO conv 5% down 6.5 vs 20% down 6.25, equity over 10 years, bid 25k over asking", { name: "Leslie Knope", calcs: ["equity"] }),

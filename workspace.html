@@ -1571,7 +1571,7 @@ function quickDraft(text, ai) {
   else if (/\bdown\b/.test(low)) preset = "down";
   // Start a fresh comparison, then fill it in
   newComparison();
-  draftInfo = { guessed: [], noPrice: !price && !refi, overLimit: 0 };
+  draftInfo = { guessed: [], noPrice: !price, overLimit: 0 };
   if (name) $("cName").value = name;
   $("cTitle").value = (refi ? "Refinance options" : "Purchase options") + (addr ? ", " + addr : "");
   if (price) setPrice(price);
@@ -1619,10 +1619,16 @@ function quickDraft(text, ai) {
     optText = opts.map((o) => o.s.name).join(" vs ");
   } else if (refi && state.price) {
     // A refinance with no loans typed: 30 and 15 year conventional for what they owe (plus debts being paid off), or 80% of the value
-    const loan = refiLoan((ai && ai.raw) || text, state.price);
-    const down = Math.round(Math.max(3, Math.min(97, 100 - loan / state.price * 100)) * 10000) / 10000;
+    // With no balance given, start at 80% of the value and ask for the balance and any second mortgage
+    const rp = refiParts((ai && ai.raw) || text);
+    const known = rp.owed && rp.owed < state.price;
+    const loan = known ? rp.owed + (rp.second || 0) + rp.debt : state.price * 0.8;
+    if (!known) draftInfo.refiAsk = { debt: rp.debt, second: rp.second };
+    else if (rp.second === null) draftInfo.refiAsk = { debt: rp.debt, owed: rp.owed };
     const a = { ...state.scenarios[0] };
-    state.scenarios = [30, 15].map((term) => { const x = { ...a, type: "conv", term, arm: 0, points: 0, bd: 0, credit: 0, amt2: 0, downPct: down, fthb: false, rate: +(term === 15 ? (+a.rate || 6.75) - 0.5 : (+a.rate || 6.75)).toFixed(3), est: true }; x.mi = convPmi(down, term, false); if (loanClass(state.price * (1 - down / 100), st, county).kind === "jumbo") { x.type = "jumbo"; x.mi = 0; } return x; });
+    file.st = st || undefined; file.county = county || undefined;
+    state.scenarios = [30, 15].map((term) => ({ ...a, type: "conv", term, arm: 0, points: 0, bd: 0, credit: 0, amt2: 0, fthb: false, rate: +(term === 15 ? (+a.rate || 6.75) - 0.5 : (+a.rate || 6.75)).toFixed(3), est: true }));
+    const down = setRefiLoan(Math.min(loan, state.price * 0.97));
     nameOptions(state.scenarios.map((x) => ({ s: x, typed: { down: false } })));
     renderCards(); render();
     optText = state.scenarios.map((x) => x.name).join(" vs ") + ` (loan ${usd.format(Math.round(state.price * (1 - down / 100)))})`;
@@ -1646,13 +1652,34 @@ function quickDraft(text, ai) {
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
 }
 // Refinance loan amount from a note: "owes 300k" / "balance of $300,000", plus "credit cards 40k" / "pay off $25k of debt" being consolidated
-function refiLoan(text, value) {
-  const amt = (m) => m ? parseFloat(m[1].replace(/,/g, "")) * (/^k/i.test(m[2] || "") ? 1000 : /^m/i.test(m[2] || "") ? 1e6 : 1) : 0;
-  const owed = amt(text.match(/\b(?:owes?|owed|owing|balance(?:\s+(?:is|of))?|payoff(?:\s+(?:is|of))?|current\s+(?:loan|mortgage)(?:\s+(?:is|of))?)\s*(?:about|around|~)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m(?:il)?)?\b/i));
-  const debt = amt(text.match(/\b(?:credit\s+cards?|cards|debts?|car\s+loan|student\s+loans?|cash[- ]?out)\s*(?:of|is|are|:|total(?:ing)?)?\s*(?:about|around|~)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m(?:il)?)?\b/i))
-    || amt(text.match(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?\s+(?:in|of)\s+(?:credit\s+card|card|consumer)?\s*debts?\b/i));
-  const loan = owed >= 1000 && owed < value ? owed + (debt >= 100 ? debt : 0) : 0;
-  return loan > 0 && loan <= value * 0.97 ? loan : value * 0.8;
+function refiAmt(m) { return m ? parseFloat(m[1].replace(/,/g, "")) * (/^k/i.test(m[2] || "") ? 1000 : /^m/i.test(m[2] || "") ? 1e6 : 1) : 0; }
+const AMT = String.raw`\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m(?:il)?)?\b`;
+// A second mortgage or HELOC: "second 50k", "$50,000 HELOC", "2nd of 40k"; 0 when "no second"; null when not mentioned
+function refiSecond(text) {
+  if (/\b(?:no|not\s+a|without\s+a|don'?t\s+have\s+a)\s+(?:second|2nd|heloc)\b|\bno\s+other\s+(?:loans?|mortgages?)\b/i.test(text)) return 0;
+  const m = text.match(new RegExp(String.raw`\b(?:second|2nd|heloc)(?:\s+(?:mortgage|loan|lien))?\s*(?:of|is|for|balance|:|at)?\s*(?:about|around|~)?\s*` + AMT, "i"))
+    || text.match(new RegExp(AMT + String.raw`\s*(?:on\s+(?:a|the)\s+|in\s+(?:a|the)\s+)?(?:second|2nd|heloc)\b`, "i"));
+  if (m) return refiAmt(m);
+  return null;
+}
+// Refinance amounts from a note: "owes 300k" / "balance of $300,000", any second mortgage, plus "credit cards 40k" being paid off
+function refiParts(text) {
+  const owed = refiAmt(text.match(new RegExp(String.raw`\b(?:owes?|owed|owing|balance(?:\s+(?:is|of))?|payoff(?:\s+(?:is|of))?|current\s+(?:loan|mortgage)(?:\s+(?:is|of))?|first(?:\s+mortgage)?(?:\s+(?:is|of))?)\s*(?:about|around|~)?\s*` + AMT, "i")));
+  const debt = refiAmt(text.match(new RegExp(String.raw`\b(?:credit\s+cards?|cards|debts?|car\s+loan|student\s+loans?|cash[- ]?out)\s*(?:of|is|are|:|total(?:ing)?)?\s*(?:about|around|~)?\s*` + AMT, "i")))
+    || refiAmt(text.match(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?\s+(?:in|of)\s+(?:credit\s+card|card|consumer)?\s*debts?\b/i));
+  return { owed: owed >= 1000 ? owed : 0, second: refiSecond(text), debt: debt >= 100 ? debt : 0 };
+}
+// Set every refinance option to one loan amount (and its mortgage insurance, and jumbo over the county limit)
+function setRefiLoan(loan) {
+  const down = Math.round(Math.max(3, Math.min(97, 100 - loan / state.price * 100)) * 10000) / 10000;
+  state.scenarios.forEach((x) => {
+    x.downPct = down;
+    if (x.type === "conv" || x.type === "jumbo") {
+      const lc = loanClass(state.price * (1 - down / 100), file.st, file.county);
+      x.type = lc.kind === "jumbo" ? "jumbo" : "conv"; x.fthb = false; x.mi = x.type === "conv" ? convPmi(down, x.term, false) : 0;
+    }
+  });
+  return down;
 }
 // Closing costs a cash buyer still pays (title, closing and recording fees, deed tax), taken from the comparison's fee template.
 // A cash-purchase fee template will replace this later.
@@ -1782,7 +1809,8 @@ function asAfterDraft(ok) {
   if (ok === false) return;
   // What's still missing, as a numbered list; then one question at a time, in the same order
   const todo = [];
-  if (info.noPrice) todo.push(["Purchase price (I used $450,000 for now)", asAskPrice]);
+  if (info.noPrice) todo.push([/^refinance/i.test($("cTitle").value) ? "Home value (I used $450,000 for now)" : "Purchase price (I used $450,000 for now)", asAskPrice]);
+  if (info.refiAsk) todo.push([info.refiAsk.owed ? "Any second mortgage or HELOC to pay off?" : "Current loan balance, and any second mortgage (I used 80% of the value for now)", () => asAskBalance(info.refiAsk)]);
   if (info.overLimit) todo.push(["County, since a loan is over the conforming limit (high balance or jumbo?)", asAskCounty]);
   if (info.guessed && info.guessed.length) todo.push([`Rate${info.guessed.length > 1 ? "s" : ""} for ${info.guessed.map((i) => LETTERS[i]).join(" and ")} (I estimated ${info.guessed.length > 1 ? "them" : "it"})`, () => asAskRates(info.guessed, info.sample)]);
   if (todo.length > 1) asSay("Still needed:\n\n" + todo.map(([t], i) => `${i + 1}) ${t}`).join("\n\n"));
@@ -1820,6 +1848,34 @@ function asAskCounty() {
     asSay(`${county} County${st ? ", " + st : ""}. ${out.join(", ")}.`);
     asNext();
   } });
+}
+// Refinance: the balance owed and any second mortgage decide the loan amount; "not sure" keeps 80% of the value
+function asAskBalance(r) {
+  const debtTxt = r.debt ? ` plus ${usd.format(r.debt)} of debts paid off` : "";
+  const setLoan = (owed, second) => {
+    if (!toCompare()) return asNext();
+    const loan = Math.min(owed + second + (r.debt || 0), state.price * 0.97);
+    setRefiLoan(loan); renderCards(); render(); syncActive();
+    asSay(`Loan amount set to ${usd.format(Math.round(loan))}: balance ${usd.format(owed)}${second ? ` + second ${usd.format(second)}` : ""}${r.debt ? ` + ${usd.format(r.debt)} debts` : ""}.`);
+    asNext();
+  };
+  const unsure = () => { asSay("OK, I kept the loan at 80% of the value. Change it on the cards when you know the balance."); asNext(); };
+  if (r.owed) {
+    asSay(`Is there a second mortgage or HELOC to pay off too? Type its balance, or say no.`, [{ label: "No second", fn: () => setLoan(r.owed, 0) }], { kind: "balance", answer: (t) => {
+      const sec = /^\s*(?:no|nope|none|n\/?a)\b/i.test(t) ? 0 : refiSecond(t) ?? refiAmt(t.match(new RegExp(AMT, "i")));
+      setLoan(r.owed, sec >= 1000 ? sec : 0);
+    } });
+    return;
+  }
+  asSay(`What's the current loan balance${debtTxt ? " (I'll add the debts being paid off)" : ""}? And is there a second mortgage or HELOC? For example: "320k, no second" or "320k and a 45k HELOC". I used 80% of the value for now.`,
+    [{ label: "Not sure, use 80%", fn: unsure }], { kind: "balance", answer: (t) => {
+      if (/not\s+sure|unsure|don'?t\s+know|no\s+idea|idk/i.test(t)) return unsure();
+      const sec = refiSecond(t);
+      const rest = t.replace(new RegExp(String.raw`\b(?:second|2nd|heloc)(?:\s+(?:mortgage|loan|lien))?\s*(?:of|is|for|balance|:|at)?\s*(?:about|around|~)?\s*` + AMT, "i"), " ").replace(new RegExp(AMT + String.raw`\s*(?:on\s+(?:a|the)\s+|in\s+(?:a|the)\s+)?(?:second|2nd|heloc)\b`, "i"), " ");
+      const owed = refiAmt(rest.match(new RegExp(AMT, "i")));
+      if (owed < 1000 || owed >= state.price) { asSay("I didn't catch a balance there, so I kept 80% of the value. You can change it on the cards."); return asNext(); }
+      setLoan(owed, sec || r.second || 0);
+    } });
 }
 function asAskRates(idx, sample) {
   const list = idx.map((i) => `${LETTERS[i]} (${state.scenarios[i].name}, ${+state.scenarios[i].rate}%)`).join(", ");
@@ -2049,7 +2105,7 @@ $("quickForm").addEventListener("submit", (e) => {
   // Shown in the conversation; names stay in the browser
   asUser(v);
   if (clientByName(v)) return;
-  if (asPending && asPending.kind === "pick") { const h = asPending; asPending = null; h.answer(v); return; }
+  if (asPending && (asPending.kind === "pick" || asPending.kind === "balance")) { const h = asPending; asPending = null; h.answer(v); return; }
   if ($("aiOn").checked && clientOpen()) {
     const b = noteBasics(v), cur = $("cName").value.trim().toLowerCase();
     // A different client only when the note names someone (capitalized, like "Mike Brown") and gives a price or loan options
