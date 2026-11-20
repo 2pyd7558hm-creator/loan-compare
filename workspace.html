@@ -1145,20 +1145,52 @@ $("tplList").addEventListener("click", async (e) => {
 /* ---- Quick draft: "Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA" ---- */
 // Loan options typed out in the quick draft, e.g. "no points vs 1.5 points" or "conv 5% down vs FHA 3.5% down"
 const OPT_WORD = /\b(conv|conventional|fha|va|points?|pts?|down|yr|year|years|fixed|rate|buy ?down)\b|\d\s*%/i;
+// A loan option names at least one real loan detail: a rate, points, a program, a term or a down payment.
+// ("2 extra payments a year" or "2 scenarios" are not options.)
+const OPT_FEATURE = /\d\s*%|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b|\b(?:conv|conventional|fha|va)\b|\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b|\bbuy ?down\b|\b(?:no|zero)\s+down\b/i;
+const OPT_COUNT = /\b(\d|two|three|four)\s+(?:scenarios|options|loans|loan options)\b/i;
 function optionSpecs(text) {
-  const pieces = text.split(/\s+(?:vs\.?|versus|compared (?:to|with))\s+/i);
+  // Break the text into short phrases: sentences, commas (not inside $450,000), " - ", "vs", "then"
+  const SPLIT = /(?<!\d)\.(?!\d)|[;\n]|,(?!\d{3})|\s[-–—]\s|\s+then\s+/i, VS = /\s+(?:vs\.?|versus|compared (?:to|with))\s+/i;
+  // Which loan details a phrase names, so "20% down, 7.375%" reads as one option (a down payment and its rate)
+  const feats = (c) => ({ rate: /\d\s*%(?!\s*down)|\b(?:at|rate)\s*\d/i.test(c), down: /%\s*down|\b(?:no|zero|\d+)\s*down\b/i.test(c),
+    points: /\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/i.test(c), type: /\b(?:conv|conventional|fha|va)\b/i.test(c), term: /\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)/i.test(c) });
   let specs = [];
-  if (pieces.length > 1) {
-    pieces.forEach((pc, i) => { const cs = pc.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean); if (cs.length) specs.push(i === 0 ? cs[cs.length - 1] : cs[0]); });
-    // typed without commas ("John Smith 450k CO no points vs ..."): start the first option at its first loan word
-    const m0 = specs[0] && specs[0].match(/\b(?:no|zero|conv|conventional|fha|va|buy ?down|\d+(?:\.\d+)?\s*(?:%|points?|pts?|-?\s*(?:yr|year)s?\b))/i);
-    if (m0 && m0.index > 0) specs[0] = specs[0].slice(m0.index);
-  } else {
-    specs = text.split(/[,;\n]+/).map((x) => x.trim()).filter((x) => OPT_WORD.test(x));
+  for (const group of text.split(VS)) {
+    let cur = null;
+    for (const raw of group.split(SPLIT).map((x) => (x || "").trim()).filter(Boolean)) {
+      // "no points and 1.5 points" / "7.375% and 10% down": split lists when every part is a loan detail
+      const sub = raw.split(/\s+(?:and|or|&)\s+|\s*\/\s*/i).map((x) => x.trim()).filter(Boolean);
+      for (const c of sub.length > 1 && sub.every((x) => OPT_FEATURE.test(x)) ? sub : [raw]) {
+        const f = feats(c);
+        // A phrase that adds details the option before it doesn't have yet finishes that option ("30 yr fixed at 7%, with 1 point")
+        if (cur && (OPT_FEATURE.test(c) || /^(?:with|at|plus)\b/i.test(c)) && !Object.keys(f).some((k) => f[k] && cur.f[k])) {
+          cur.text += " " + c; Object.keys(f).forEach((k) => { cur.f[k] = cur.f[k] || f[k]; });
+        } else if (OPT_FEATURE.test(c)) { cur = { text: c, f }; specs.push(cur); }
+      }
+    }
   }
-  // "no points and 1.5 points" / "15 or 30 year" style lists
-  specs = specs.flatMap((sp) => { const sub = sp.split(/\s+(?:and|or|&)\s+|\s*\/\s*/i).map((x) => x.trim()).filter(Boolean); return sub.length > 1 && sub.every((x) => OPT_WORD.test(x)) ? sub : [sp]; });
-  return specs.filter((x) => OPT_WORD.test(x)).slice(0, 4);
+  specs = specs.map((x) => x.text);
+  // typed without commas ("John Smith 450k CO no points vs ..."): start the first option at its first loan word
+  const m0 = specs[0] && specs[0].match(/\b(?:no|zero|conv|conventional|fha|va|buy ?down|\d+(?:\.\d+)?\s*(?:%|points?|pts?|-?\s*(?:yr|year)s?\b))/i);
+  if (m0 && m0.index > 0) specs[0] = specs[0].slice(m0.index);
+  // "a loan comparison with 2 scenarios": keep exactly that many
+  const cm = text.match(OPT_COUNT), want = cm ? ({ two: 2, three: 3, four: 4 }[cm[1].toLowerCase()] || +cm[1]) : 4;
+  return specs.slice(0, Math.min(4, want || 4));
+}
+// Clean option names like "30 Yr Fixed - 1 Point" or "FHA 30 Yr Fixed - 3.5% Down", showing only what differs or was typed
+function nameOptions(opts) {
+  const showType = opts.some((o) => o.s.type !== "conv"), showPts = opts.some((o) => o.typed.points), downs = new Set(opts.map((o) => o.s.downPct));
+  const showDown = opts.some((o) => o.typed.down) && (downs.size > 1 || !showPts);
+  const ptsTxt = (p) => `${+p} Point${+p === 1 ? "" : "s"}`;
+  const names = opts.map((o) => {
+    const s = o.s, det = [];
+    if (showPts) det.push(ptsTxt(s.points));
+    if (showDown) det.push(`${+s.downPct}% Down`);
+    return (showType ? { conv: "Conv", fha: "FHA", va: "VA" }[s.type] + " " : "") + `${s.term} Yr Fixed` + (det.length ? " - " + det.join(", ") : "");
+  });
+  // still the same name twice: add the rate
+  opts.forEach((o, i) => { o.s.name = names.filter((n) => n === names[i]).length > 1 ? `${names[i]} at ${+o.s.rate}%` : names[i]; });
 }
 function parseOption(sp, base) {
   const low = sp.toLowerCase(), num = (re) => { const m = low.match(re); return m ? parseFloat(m[1]) : null; };
@@ -1171,20 +1203,30 @@ function parseOption(sp, base) {
   const guessed = rate === null;
   if (guessed) rate = base.rate - (type === "fha" ? 0.25 : type === "va" ? 0.375 : 0) - ((term || 30) <= 15 ? 0.5 : 0) - 0.25 * (points || 0);
   if (down === null) down = type === "fha" ? 3.5 : type === "va" ? 0 : base.downPct;
-  const nm = sp.replace(/\s+/g, " ").trim();
-  return { guessed, s: { name: nm.charAt(0).toUpperCase() + nm.slice(1), type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, fees: base.fees, downPct: down,
+  return { guessed, typed: { points: points !== null, down: /\bdown\b/.test(low) }, s: { name: "", type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, fees: base.fees, downPct: down,
     mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 function quickDraft(text) {
-  const parts = text.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+  const parts = text.split(/,(?!\d{3})|[;\n]+/).map((x) => x.trim()).filter(Boolean);
   const low = text.toLowerCase();
-  let price = null, st = null, name = null, addr = null;
+  let price = null, st = null, name = null;
   // Extras for the other calculators: "rent 2400", "income 95k", "wait" / "cost of waiting", "afford"
   const RENT_RE = /\brent(?:ing|s)?\s*(?:is|of|at|:)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?/i, INC_RE = /\b(?:income|makes?|salary)\s*(?:is|of|:)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?/i;
   const numK = (mm) => mm ? parseFloat(mm[1].replace(/,/g, "")) * (mm[2] ? 1000 : 1) : null;
-  const rent = numK(text.match(RENT_RE)), income = numK(text.match(INC_RE));
-  const textP = text.replace(RENT_RE, " ").replace(INC_RE, " ");
+  let rent = numK(text.match(RENT_RE)), income = numK(text.match(INC_RE));
+  if (rent !== null && rent < 100) rent = null;
+  if (income !== null && income < 1000) income = null;
+  // Street address anywhere in the text: "The property address is 1224 Main St."
+  const STREET_RE = /\b\d{1,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Za-z0-9'-]+\s+){1,3}?(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Blvd|Boulevard|Way|Pl|Place|Cir|Circle|Pkwy|Parkway|Ter|Terrace|Trl|Trail|Hwy|Loop)\b/;
+  const am = text.match(STREET_RE);
+  let addr = am ? am[0] : null;
+  // "2 extra payments a year" / "$200 extra a month" for the extra payments tab
+  const NUMW = { one: 1, two: 2, three: 3, four: 4 };
+  const xy = text.match(/\b(\d+|one|two|three|four)\s+extra\s+(?:monthly\s+)?payments?\s+(?:a|per|each|every)\s+year/i);
+  const xm = text.match(/\$\s*(\d[\d,]*)\s*(?:extra\s+)?(?:a|per|each|every)\s+month|\bextra\s+\$?\s*(\d[\d,]*)\s*(?:a|per|each|every)\s+month/i);
+  const extraYearN = xy ? (NUMW[xy[1].toLowerCase()] || +xy[1]) : null, extraMonth = xm ? +(xm[1] || xm[2]).replace(/,/g, "") : null;
+  const textP = text.replace(RENT_RE, " ").replace(INC_RE, " ").replace(STREET_RE, " ");
   const m = textP.match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d+)?\s*(k|m)?\b|\$\s*(\d+(?:\.\d+)?)\s*(k|m)\b|\b(\d+(?:\.\d+)?)\s*(k|m)\b/i);
   if (m) {
     const num = parseFloat((m[1] || m[3] || m[5]).replace(/,/g, "")), unit = (m[2] || m[4] || m[6] || "").toLowerCase();
@@ -1233,6 +1275,7 @@ function quickDraft(text) {
   if (specs.length >= 2) {
     const base = { ...state.scenarios[0] };
     const opts = specs.map((sp) => parseOption(sp, base));
+    nameOptions(opts);
     guessed = opts.some((o) => o.guessed);
     state.scenarios = opts.map((o) => o.s); renderCards(); render();
     optText = opts.map((o) => o.s.name).join(" vs ");
@@ -1248,7 +1291,14 @@ function quickDraft(text) {
   if (rent) { addCalc("rvb", { rent }, true); added.push("rent vs buy"); }
   if (income || /\bafford/i.test(text)) { addCalc("aff", income ? { income } : null, true); added.push("affordability"); }
   if (/\bdebts?\b|consolidat/i.test(text)) { addCalc("debt", null, true); added.push("debt consolidation"); }
-  if (/\bextra\b|pay ?off (early|faster|sooner)/i.test(text)) { addCalc("amort", null, true); added.push("extra payments"); }
+  if (/\bextra\b|pay ?off (early|faster|sooner)/i.test(text)) {
+    // Use the first option's loan; "2 extra payments a year" means two extra principal and interest payments each year
+    const a = analyze(state.scenarios[0]), s0 = state.scenarios[0], ex = { loan: Math.round(a.loan), rate: s0.rate, term: s0.term };
+    if (extraYearN) Object.assign(ex, { yearly: Math.round(extraYearN * a.pi), extra: 0 });
+    if (extraMonth) ex.extra = extraMonth;
+    addCalc("amort", ex, true);
+    added.push("extra payments" + (extraYearN ? ` (${extraYearN} extra payment${extraYearN === 1 ? "" : "s"} a year, ${usd.format(Math.round(extraYearN * a.pi))})` : extraMonth ? ` (${usd.format(extraMonth)} a month)` : ""));
+  }
   if (/\barm\b|adjustable/i.test(text)) { addCalc("arm", null, true); added.push("ARM vs fixed"); }
   if (/over ?ask|\bbid\b/i.test(text)) { addCalc("equity", { mode: "bid" }, true); added.push("bid over asking"); }
   else if (/\bequity\b|apprec/i.test(text)) { addCalc("equity", null, true); added.push("equity & appreciation"); }
