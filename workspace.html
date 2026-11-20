@@ -1444,7 +1444,7 @@ function parseOption(sp, base) {
     mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
 // Words that end a client's name in a note
-const NAME_STOP = /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|purchasing|buy|buying|home|house|property|loans?|price|scenarios?|options?|compare|comparison|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash|seller|credit|dpa|add|can|could|we|please|also|with|new|wants?|needs?|looking|is|are|has|the|a|an|to|of|in)$/i;
+const NAME_STOP = /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|purchasing|buy|buying|home|house|property|loans?|price|scenarios?|options?|compare|comparison|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash|seller|credit|dpa|add|can|could|we|please|also|with|new|wants?|needs?|looking|is|are|has|the|a|an|to|of|in|what|if|they|their|them|he|she|his|her|it|its|i|you|did|do|does|how|about|show|me|make|change|swap|switch|try|use|let'?s|would|should|could|instead|actually|maybe|yes|no|ok|okay|sure|thanks|on|for|from|at|by|but|so|then|that|this|these|those|one|ones|both|all)$/i;
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 // The client, price, state and extras in a note, read by the typed rules (also used to strip names before the AI reader)
 function noteBasics(text) {
@@ -1853,11 +1853,13 @@ async function asChat(v) {
   }
   asPending = null; asQueue = [];
   applyChat(res);
-  if (res.reply) asSay(res.reply);
+  const who = $("cName").value.trim();
+  const named = (t) => who ? String(t || "").replace(/\bClient A\b/g, who) : String(t || "");
+  if (res.reply) asSay(named(res.reply));
   const k = res.suggest_calc;
   if (k && k !== "none" && CALCS[k] && !file.calcs.some((c) => c.kind === k) && !asDeclined.has(k)) {
     asDeclined.add(k);
-    asSay(res.suggest_text || `Want to add ${KIND_LABEL[k]}?`, [
+    asSay(named(res.suggest_text) || `Want to add ${KIND_LABEL[k]}?`, [
       { label: "Yes, add it", fn: () => { const t = addCalcKind(k); drawTabs(); asSay(t ? `Added ${KIND_LABEL[k]} as a tab below. Save when it looks right.` : "That one's already there."); } },
       { label: "No thanks", fn: () => asSay("OK.") },
     ]);
@@ -1936,7 +1938,9 @@ $("quickForm").addEventListener("submit", (e) => {
   asUser(v);
   if ($("aiOn").checked && clientOpen()) {
     const b = noteBasics(v), cur = $("cName").value.trim().toLowerCase();
-    const otherClient = b.name && b.name.toLowerCase() !== cur && (b.price || optionSpecs(v).length >= 1);
+    // A different client only when the note names someone (capitalized, like "Mike Brown") and gives a price or loan options
+    const looksLikeName = (n) => n.split(/\s+/).every((w) => /^[A-Z][a-z.'-]*$|^&$|^and$/.test(w));
+    const otherClient = b.name && b.name.toLowerCase() !== cur && looksLikeName(b.name) && (b.price || optionSpecs(v).length >= 1);
     if (!otherClient) { asChat(v); return; }
   }
   // An answer to the assistant's question, unless it's clearly a new note (another client, or a price with loan options)
