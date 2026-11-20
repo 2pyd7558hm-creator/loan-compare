@@ -1558,7 +1558,7 @@ function clientMessage() {
   const names = [...new Set(shared.map((c) => c.kind === "equity" && c.data && c.data.mode === "bid" ? "Bid Over Asking" : NAMES[c.kind]).filter(Boolean))].map((n) => "the " + n);
   const see = names.length ? `You'll see ${join(names)}, which you can open any time with this private link:` : "You can open them any time with this private link:";
   // Signed with name, brand and phone; the loan officer's own email signature adds the rest
-  const body = `Hi ${hi},\n\nHere are the numbers for us to review together. ${see}\n${$("shareUrl").value}\n\nLet's go over them together when you get a chance.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}`;
+  const body = `Hi ${hi},\n\nHere are the numbers for us to review together. ${see}\n\n${$("shareUrl").value}\n\nLet's go over them together when you get a chance.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}`;
   return { body };
 }
 $("msgBtn").addEventListener("click", async () => {
