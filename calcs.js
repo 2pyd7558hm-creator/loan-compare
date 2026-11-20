@@ -17,6 +17,7 @@ function apprLabel(d) {
   return `${pct(apprOf(d), 2)} / yr <span class="est">FHFA ${d.st}, ${APPR_SRC.find((x) => x[0] === d.apprSrc)[1].toLowerCase()}</span>`;
 }
 
+const usd2 = (v) => "$" + (+v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pmt = (loan, ratePct, years) => { const n = years * 12, r = ratePct / 1200; return loan <= 0 ? 0 : r ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n; };
 const balAfter = (loan, ratePct, years, m) => { const r = ratePct / 1200, p = pmt(loan, ratePct, years); return r ? Math.max(0, loan * Math.pow(1 + r, m) - p * (Math.pow(1 + r, m) - 1) / r) : Math.max(0, loan - p * m); };
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
@@ -438,14 +439,33 @@ const AMORT = {
   title: () => "Paying your loan off faster",
   intro: () => "Shows how an extra amount each month, or a one-time payment, shortens the loan and cuts the interest you pay.",
   note: "Extra payments are applied to principal in the month paid. Figures cover principal and interest only and assume the rate stays the same for the life of the loan.",
-  blank: (b) => ({ loan: b.price ? Math.round(b.price * (1 - (b.downPct ?? 10) / 100)) : 400000, rate: b.rate || 6.5, term: 30, extra: 200, lump: 0, lumpYear: 5, yearly: 0, schedule: false }),
+  blank: (b) => ({ loan: b.price ? Math.round(b.price * (1 - (b.downPct ?? 10) / 100)) : 400000, rate: b.rate || 6.5, term: 30, extra: 200, lump: 0, lumpYear: 5, yearly: 0, schedule: false, opt: "auto", other: 0, roundTo: 0 }),
+  // Fill from a loan option in the comparison (window.hubOptions comes from the workspace)
+  useOption(d, i) {
+    const os = typeof window.hubOptions === "function" ? window.hubOptions() : [], o = os[i];
+    if (!o) return false;
+    d.loan = Math.round(o.loan); d.rate = o.rate; d.term = o.term; d.other = Math.max(0, Math.round((o.total - o.pi) * 100) / 100); d.opt = o.letter;
+    return true;
+  },
   mount(sec, d, changed) {
+    const os = typeof window.hubOptions === "function" ? window.hubOptions() : [];
+    if (d.opt === "auto") { if (!AMORT.useOption(d, 0)) d.opt = ""; }
+    const terms = [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"], [10, "10 years"]];
+    if (!terms.some(([v]) => v === +d.term)) terms.push([+d.term, `${d.term} years`]);
+    const ro = document.body.classList.contains("readonly");
     sec.innerHTML = `
       <div class="calc-head"><h2>Loan and extra payments</h2></div>
+      ${os.length && !ro ? `<div class="am-from"><span>Use a loan from the comparison</span><div class="seg" role="group">${os.map((o, i) => `<button type="button" data-use="${i}" aria-pressed="${d.opt === o.letter}" title="${esc(o.name)}">${o.letter}</button>`).join("")}</div><span class="am-on" id="amOn"></span></div>` : ""}
+      <div class="panel am-round">
+        <div><b>Round up the payment</b><p id="amNow"></p></div>
+        <div class="am-rbtn">${ro ? "" : `<button type="button" class="btn" data-round="100">Next $100</button><button type="button" class="btn" data-round="500">Next $500</button>`}</div>
+        <div class="fields">${numIn("Round the payment up to", "roundTo", d, { pre: "$", step: 50 })}</div>
+      </div>
       <div class="panel fields calc-in" id="amIn">
         ${numIn("Loan amount", "loan", d, { pre: "$", step: 1000 })}
         ${numIn("Interest rate", "rate", d, { suf: "%", step: 0.125 })}
-        ${selIn("Term", "term", d, [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"], [10, "10 years"]])}
+        ${selIn("Term", "term", d, terms)}
+        ${numIn("Taxes, ins., MI, HOA", "other", d, { pre: "$", step: 10 })}
         ${numIn("Extra each month", "extra", d, { pre: "$", step: 25 })}
         ${numIn("Extra once a year", "yearly", d, { pre: "$", step: 100 })}
         ${numIn("One-time payment", "lump", d, { pre: "$", step: 1000 })}
@@ -473,7 +493,14 @@ const AMORT = {
       }
       return { p, bal, int, months, years };
     };
+    const payNow = () => pmt(+d.loan || 0, +d.rate || 0, +d.term || 30) + (+d.other || 0);
     const compute = () => {
+      // Rounding up: the extra is whatever takes the monthly payment up to the round number
+      const now = payNow();
+      if (+d.roundTo > 0) { d.extra = Math.max(0, Math.ceil(+d.roundTo - now)); const x = sec.querySelector('[data-k="extra"]'); if (x && document.activeElement !== x) x.value = d.extra; }
+      const op = os.find((o) => o.letter === d.opt), on = sec.querySelector("#amOn"); if (on) on.textContent = op ? op.name : "";
+      sec.querySelector("#amNow").textContent = `Payment now ${usd2(now)}` + (+d.other ? ` (principal and interest ${usd2(now - d.other)}, plus ${usd2(+d.other)} taxes, insurance, MI and HOA)` : " (principal and interest)") +
+        (+d.roundTo > 0 ? `. Rounded up to ${usd.format(+d.roundTo)}, that's ${usd.format(d.extra)} extra a month.` : ".");
       const a = run(false), b = run(true), saved = a.months - b.months;
       sec.querySelector("#amHl").innerHTML =
         hlBox("Paid off in", yrsMo(b.months), `instead of ${yrsMo(a.months)}`, "good") +
@@ -485,6 +512,21 @@ const AMORT = {
       sec.querySelector("#amTable").innerHTML = `<thead><tr><th>Year</th><th>Principal</th><th>Extra</th><th>Interest</th><th>Balance</th><th>Balance without extra</th></tr></thead><tbody>` +
         ys.map((y, i) => `<tr><td>${i + 1}</td><td>${usd.format(y.prin)}</td><td>${usd.format(y.extra)}</td><td>${usd.format(y.int)}</td><td>${usd.format(y.bal)}</td><td>${usd.format(a.years[i].bal)}</td></tr>`).join("") + `</tbody>`;
     };
+    // Typing an extra amount by hand turns rounding off
+    if (sec._amIn) sec.removeEventListener("input", sec._amIn, true);
+    if (sec._amClick) sec.removeEventListener("click", sec._amClick);
+    sec._amIn = (e) => { if (sec.querySelector("#amNow") && e.target.dataset.k === "extra") { d.roundTo = 0; const r = sec.querySelector('[data-k="roundTo"]'); if (r) r.value = 0; } };
+    sec.addEventListener("input", sec._amIn, true);
+    sec.addEventListener("click", sec._amClick = (e) => {
+      if (!sec.querySelector("#amNow")) return;
+      const u = e.target.closest("[data-use]"), r = e.target.closest("[data-round]");
+      if (u && AMORT.useOption(d, +u.dataset.use)) { AMORT.mount(sec, d, changed); changed(); }
+      if (r) {
+        const step = +r.dataset.round, now = payNow();
+        d.roundTo = Math.ceil((now + 0.01) / step) * step;
+        sec.querySelector('[data-k="roundTo"]').value = d.roundTo; compute(); changed();
+      }
+    });
     wireCalc(sec, d, compute, changed);
   }
 };
