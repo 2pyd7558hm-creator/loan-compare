@@ -78,8 +78,8 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; align-content: start }
 .card-head { display: flex; align-items: center; gap: 10px }
 .tag { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 13px; flex: none }
-.card-head input { font-weight: 600; border-color: transparent; padding: 4px 6px; background: transparent }
-.card-head input:hover { border-color: var(--line) }
+.card-head textarea { font: inherit; font-weight: 600; line-height: 1.3; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; background: transparent; color: inherit; resize: none; width: 100%; min-width: 0; overflow: hidden }
+.card-head textarea:hover, .card-head textarea:focus { border-color: var(--line) }
 .card .fields { grid-template-columns: 1fr 1fr; gap: 10px }
 .icon-btn { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1; padding: 4px 6px; border-radius: 6px }
 .icon-btn:hover { background: var(--soft); color: var(--fg) }
@@ -105,6 +105,7 @@ table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14p
 th, td { padding: 9px 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap }
 th:first-child, td:first-child { text-align: left; color: var(--muted); font-weight: 500 }
 thead th { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--fg); vertical-align: bottom }
+thead th:not(:first-child) { white-space: normal; min-width: 110px; max-width: 190px; text-wrap: balance }
 thead th .tag { display: inline-grid; width: 20px; height: 20px; font-size: 11px; margin-right: 6px; vertical-align: -4px }
 tr.group td { background: var(--soft); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; color: var(--muted); padding-block: 6px }
 tr.strong td { font-weight: 600; color: var(--fg) }
@@ -184,6 +185,7 @@ textarea { font: inherit; font-size: 14px; color: var(--fg); background: var(--s
 .client-banner { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center }
 .client-banner b { font-family: var(--font-display); font-size: 17px }
 body.readonly .card input, body.readonly .card select, body.readonly .panel input { pointer-events: none; background: var(--soft) }
+body.readonly .card-head textarea { pointer-events: none }
 body.readonly .icon-btn, body.readonly .add { display: none }
 body.locked main > :not(#ws) { display: none }
 </style>
@@ -488,7 +490,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
     <p><strong>For illustration only.</strong> This is not a loan offer, a commitment to lend, or a Loan Estimate. Figures are estimates based on the inputs shown. Actual rates, APRs, fees and payments depend on credit, property, loan amount, occupancy and market conditions, and are subject to underwriting approval. Rates can change daily.</p>
     <p id="calcNote" hidden></p>
-    <p class="calc-compare">APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%; VA funding fee for first use, 2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) as finance charges. Conventional PMI is an estimate and is shown until the balance reaches 78% of the purchase price. FHA annual MIP follows HUD's current table (Mortgagee Letter 2023-05), is figured on each year's average scheduled balance as HUD does, and is shown for 11 years with 10% or more down, otherwise for the life of the loan. Cash to close shows down payment, points and lender fees, plus third-party fees, prepaids and escrow deposits when closing costs are itemized. Fees paid by the seller or lender are not included. Prepaids and escrow deposits are estimates. Taxes and insurance are estimates.</p>
+    <p class="calc-compare">APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%; VA funding fee for first use, 2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) as finance charges. Conventional PMI is an estimate and is shown until the balance reaches 78% of the purchase price. FHA annual MIP follows HUD's current table (Mortgagee Letter 2023-05), is figured on each year's average scheduled balance as HUD does, and is shown for 11 years with 10% or more down, otherwise for the life of the loan. Jumbo loans (over the FHFA 2026 conforming loan limit for the county) are shown with no mortgage insurance. Adjustable-rate (ARM) options are shown at their starting rate for the whole loan; the ARM vs fixed tab shows how the payment can change after the fixed period. Cash to close shows down payment, points and lender fees, plus third-party fees, prepaids and escrow deposits when closing costs are itemized. Fees paid by the seller or lender are not included. Prepaids and escrow deposits are estimates. Taxes and insurance are estimates.</p>
     <p class="ehl"><svg viewBox="0 0 64 64" width="34" height="34" role="img" aria-label="Equal Housing Lender"><path d="M32 4 2 26h8v32h44V26h8L32 4z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="19" y="30" width="26" height="6" fill="currentColor"/><rect x="19" y="42" width="26" height="6" fill="currentColor"/></svg><span>EQUAL HOUSING<br>LENDER</span></p>
     <p id="brandFoot"></p>
     <p class="links"><a href="https://www.nmlsconsumeraccess.org/" target="_blank" rel="noopener">NMLS Consumer Access</a> · <a href="https://bit.ly/TexasRecoveryFundNotice" target="_blank" rel="noopener">Texas Recovery Fund Notice</a> · <a href="https://www.thatmortgagecouple.com/legal" target="_blank" rel="noopener">Legal</a> · <a href="https://www.thatmortgagecouple.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></p>
@@ -539,6 +541,29 @@ function fhaMip(baseLoan, value, termYrs) {
 function vaFee(downPct) { return downPct >= 10 ? 1.25 : downPct >= 5 ? 1.5 : 2.15; }
 // Starting PMI rate for conventional loans (borrower-paid monthly, good credit). An estimate the loan officer can change on the card.
 function convPmi(downPct, termYrs) { return downPct >= 20 ? 0 : termYrs <= 15 ? 0.3 : downPct < 5 ? 0.62 : downPct < 10 ? 0.55 : downPct < 15 ? 0.45 : 0.3; }
+
+// Conforming loan limits for 2026, one-unit homes (FHFA, fullcountyloanlimitlist2026). Every county uses the $832,750 baseline
+// except the high-cost counties below; Alaska, Hawaii, Guam and the U.S. Virgin Islands start at $1,249,125.
+const CLL_YEAR = 2026, CLL_BASE = 832750, CLL_STATEWIDE = { AK: 1249125, HI: 1249125, GU: 1249125, VI: 1249125 };
+const CLL_HIGH = {"CA":{"Alameda":1249125,"Contra Costa":1249125,"Los Angeles":1249125,"Marin":1249125,"Monterey":994750,"Napa":1017750,"Orange":1249125,"San Benito":1249125,"San Diego":1104000,"San Francisco":1249125,"San Luis Obispo":1000500,"San Mateo":1249125,"Santa Barbara":941850,"Santa Clara":1249125,"Santa Cruz":1249125,"Sonoma":897000,"Ventura":1035000},"CO":{"Adams":862500,"Arapahoe":862500,"Boulder":879750,"Broomfield":862500,"Clear Creek":862500,"Denver":862500,"Douglas":862500,"Eagle":1249125,"Elbert":862500,"Garfield":1209750,"Gilpin":862500,"Grand":883200,"Jefferson":862500,"Lake":1092500,"Moffat":1089050,"Park":862500,"Pitkin":1209750,"Routt":1089050,"San Miguel":994750,"Summit":1092500},"CT":{"Greater Bridgeport Planning Region":977500,"Naugatuck Valley Planning Region":851000,"Western Connecticut Planning Region":977500},"DC":{"District Of Columbia":1249125},"FL":{"Monroe":990150},"HI":{"Kalawao":1299500,"Maui":1299500},"ID":{"Teton":1249125},"MD":{"Calvert":1209750,"Charles":1249125,"Frederick":1249125,"Montgomery":1249125,"Prince George's":1249125},"MA":{"Dukes":1249125,"Essex":962550,"Middlesex":962550,"Nantucket":1249125,"Norfolk":962550,"Plymouth":962550,"Suffolk":962550},"NH":{"Rockingham":962550,"Strafford":962550},"NJ":{"Bergen":1209750,"Essex":1209750,"Hudson":1209750,"Hunterdon":1209750,"Middlesex":1209750,"Monmouth":1209750,"Morris":1209750,"Ocean":1209750,"Passaic":1209750,"Somerset":1209750,"Sussex":1209750,"Union":1209750},"NY":{"Bronx":1209750,"Kings":1209750,"Nassau":1209750,"New York":1209750,"Putnam":1209750,"Queens":1209750,"Richmond":1209750,"Rockland":1209750,"Suffolk":1209750,"Westchester":1209750},"PA":{"Pike":1209750},"TN":{"Cannon":1029250,"Cheatham":1029250,"Davidson":1029250,"Dickson":1029250,"Hickman":1029250,"Macon":1029250,"Maury":1029250,"Robertson":1029250,"Rutherford":1029250,"Smith":1029250,"Sumner":1029250,"Trousdale":1029250,"Williamson":1029250,"Wilson":1029250},"UT":{"Grand":839500,"Summit":1150000,"Wasatch":1150000,"Wayne":997050},"VA":{"Arlington":1249125,"Clarke":1249125,"Culpeper":1249125,"Fairfax":1249125,"Fauquier":1249125,"Loudoun":1249125,"Madison":1209750,"Prince William":1249125,"Rappahannock":1249125,"Spotsylvania":1249125,"Stafford":1249125,"Warren":1249125,"Alexandria City":1249125,"Fairfax City":1249125,"Falls Church City":1249125,"Fredericksburg City":1249125,"Manassas City":1249125,"Manassas Park City":1249125},"WA":{"King":1063750,"Pierce":1063750,"Snohomish":1063750},"WV":{"Jefferson":1249125},"WY":{"Teton":1249125}};
+const cllFloor = (st) => CLL_STATEWIDE[st] || CLL_BASE;
+// The county limit, or null when the state has high-cost counties and no county is known
+function countyLimit(st, county) {
+  if (!st) return null;
+  const list = CLL_HIGH[st];
+  if (county) { const k = Object.keys(list || {}).find((c) => c.toLowerCase() === county.toLowerCase().replace(/\s+county$/, "")); return k ? list[k] : cllFloor(st); }
+  return list ? null : cllFloor(st);
+}
+// Conforming (at or under the baseline), high balance (over the baseline, within the county limit) or jumbo (over the county limit)
+function loanClass(base, st, county) {
+  const lim = countyLimit(st, county);
+  if (base <= (st ? cllFloor(st) : CLL_BASE)) return { kind: "conforming", limit: lim };
+  if (lim !== null) return { kind: base <= lim ? "high" : "jumbo", limit: lim };
+  const top = Math.max(...Object.values(CLL_HIGH[st] || {}), cllFloor(st || "")), unknown = !st;
+  return { kind: !unknown && base > top ? "jumbo" : "unknown", limit: null };
+}
+// Where the home is (saved with the comparison); safe to call before the workspace has loaded
+const where = () => { try { return file || {}; } catch (e) { return {}; } };
 
 function analyze(s) {
   const value = state.price;
@@ -641,11 +666,12 @@ function renderCards() {
     <div class="card">
       <div class="card-head">
         <span class="tag" style="background:var(${COLORS[i]})">${LETTERS[i]}</span>
-        <input id="s${i}-name" aria-label="Option name" value="${s.name.replace(/"/g, "&quot;")}" data-i="${i}" data-k="name">
+        <textarea id="s${i}-name" aria-label="Option name" rows="2" data-i="${i}" data-k="name">${s.name.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</textarea>
         ${state.scenarios.length > 2 ? `<button class="icon-btn" data-remove="${i}" aria-label="Remove option ${LETTERS[i]}">×</button>` : ""}
       </div>
       <div class="fields">
-        ${field("Loan type", "type", i, s, { select: [["conv", "Conv."], ["fha", "FHA"], ["va", "VA"]] })}
+        ${field("Loan type", "type", i, s, { select: [["conv", "Conv."], ["jumbo", "Jumbo"], ["fha", "FHA"], ["va", "VA"]] })}
+        ${field("Rate type", "arm", i, s, { select: [[0, "Fixed"], [5, "5/6 ARM"], [7, "7/6 ARM"], [10, "10/6 ARM"]] })}
         ${field("Term", "term", i, s, { select: [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"], [10, "10 years"]] })}
         ${field("Interest rate", "rate", i, s, { suf: "%", step: 0.125 })}
         ${field("Points", "points", i, s, { suf: "%", step: 0.125 })}
@@ -664,9 +690,15 @@ function syncMI(i) {
   const base = Math.max(state.price * (1 - s.downPct / 100), 0);
   let label, val, locked;
   if (s.type === "fha") { const f = fhaMip(base, state.price, s.term); label = `Annual MIP (HUD, ${f.years === 11 ? "11 yrs" : "life of loan"})`; val = f.rate; locked = true; }
+  else if (s.type === "jumbo") { label = "No MI (jumbo)"; val = 0; locked = true; }
   else if (s.type === "va") { label = "VA funding fee (first use)"; val = vaFee(s.downPct); locked = true; }
   else { const none = s.downPct >= 20; label = none ? "PMI (none at 20% down)" : "PMI rate / yr"; val = none ? 0 : s.mi; locked = none; }
   el.disabled = locked; el.value = val;
+  const tEl = document.getElementById(`s${i}-type`), tl = tEl && tEl.closest("label");
+  if (tl && tl.firstChild && tl.firstChild.nodeType === 3) {
+    const lc = s.type === "conv" ? loanClass(base, where().st, where().county) : null;
+    tl.firstChild.textContent = !lc ? "Loan type" : lc.kind === "jumbo" ? "Loan type (over the limit: jumbo?)" : lc.kind === "high" ? "Loan type (high balance)" : lc.kind === "unknown" ? "Loan type (high balance or jumbo?)" : "Loan type";
+  }
   const lbl = el.closest("label"); if (lbl && lbl.firstChild && lbl.firstChild.nodeType === 3) lbl.firstChild.textContent = label;
 }
 
@@ -674,7 +706,7 @@ $("cards").addEventListener("input", (e) => {
   const t = e.target, i = t.dataset.i, k = t.dataset.k;
   if (i === undefined) return;
   const s = state.scenarios[i];
-  if (k === "name") s[k] = t.value;
+  if (k === "name") s[k] = t.value.replace(/\s*\n\s*/g, " ");
   else if (k === "type") {
     s.type = t.value;
     if (s.type === "fha" && s.downPct < 3.5) s.downPct = 3.5;
@@ -684,7 +716,6 @@ $("cards").addEventListener("input", (e) => {
   else if (k === "term") s.term = +t.value;
   else if (k === "mi" && t.disabled) return;
   else { s[k] = +t.value || 0; }
-  if (k === "downPct" || k === "term") syncMI(+i);
   render();
 });
 $("cards").addEventListener("click", (e) => {
@@ -733,7 +764,7 @@ function lineChart(el, series, marker) {
 
 /* ---------- Render ---------- */
 function render() {
-  state.scenarios.forEach((s, i) => { if (s.type !== "conv") syncMI(i); });
+  state.scenarios.forEach((s, i) => syncMI(i));
   const res = state.scenarios.map(analyze);
   renderClosing(res[0]);
   const h = state.horizon * 12;
@@ -754,10 +785,11 @@ function render() {
 
   const row = (label, f, best, cls = "") => `<tr class="${cls}"><td>${label}</td>${res.map((r, i) => `<td class="${best === i ? "best" : ""}">${f(r, i)}</td>`).join("")}</tr>`;
   const group = (t) => `<tr class="group"><td colspan="${res.length + 1}">${t}</td></tr>`;
-  const typeName = { conv: "Conventional", fha: "FHA", va: "VA" };
-  $("table").innerHTML = `<thead><tr><th></th>${res.map((r, i) => `<th>${tagOf(i)}${r.s.name}</th>`).join("")}</tr></thead><tbody>
+  const typeName = { conv: "Conventional", jumbo: "Jumbo", fha: "FHA", va: "VA" };
+  const typeOf = (r) => { if (r.s.type !== "conv") return typeName[r.s.type]; const k = loanClass(Math.max(0, state.price - r.down), where().st, where().county).kind; return k === "high" ? "High balance" : k === "jumbo" ? "Conventional (over limit)" : "Conventional"; };
+  $("table").innerHTML = `<thead><tr><th></th>${res.map((r, i) => `<th>${tagOf(i)}${r.s.name.replace(/ - /g, "\u00a0- ")}</th>`).join("")}</tr></thead><tbody>
     ${group("Loan")}
-    ${row("Loan type / term", (r) => `${typeName[r.s.type]} · ${r.s.term} yr`)}
+    ${row("Loan type / term", (r) => `${typeOf(r)} · ${r.s.term} yr ${r.s.arm ? `${r.s.arm}/6 ARM` : "fixed"}`)}
     ${row("Interest rate", (r) => pct(r.s.rate))}
     ${row("APR (estimated)", (r) => pct(r.apr))}
     ${row("Loan amount", (r) => usd.format(r.loan) + (r.financed ? `<div style="font-size:12px;color:var(--muted)">incl. ${usd.format(r.financed)} financed</div>` : ""))}
@@ -1147,14 +1179,15 @@ $("tplList").addEventListener("click", async (e) => {
 const OPT_WORD = /\b(conv|conventional|fha|va|points?|pts?|down|yr|year|years|fixed|rate|buy ?down)\b|\d\s*%/i;
 // A loan option names at least one real loan detail: a rate, points, a program, a term or a down payment.
 // ("2 extra payments a year" or "2 scenarios" are not options.)
-const OPT_FEATURE = /\d\s*%|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b|\b(?:conv|conventional|fha|va)\b|\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b|\bbuy ?down\b|\b(?:no|zero)\s+down\b/i;
+const OPT_FEATURE = /\barm\b|\d\s*%|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b|\b(?:conv|conventional|fha|va)\b|\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b|\bbuy ?down\b|\b(?:no|zero)\s+down\b/i;
 const OPT_COUNT = /\b(\d|two|three|four)\s+(?:scenarios|options|loans|loan options)\b/i;
 function optionSpecs(text) {
   // Break the text into short phrases: sentences, commas (not inside $450,000), " - ", "vs", "then"
   const SPLIT = /(?<!\d)\.(?!\d)|[;\n]|,(?!\d{3})|\s[-–—]\s|\s+then\s+/i, VS = /\s+(?:vs\.?|versus|compared (?:to|with))\s+/i;
   // Which loan details a phrase names, so "20% down, 7.375%" reads as one option (a down payment and its rate)
   const feats = (c) => ({ rate: /\d\s*%(?!\s*down)|\b(?:at|rate)\s*\d/i.test(c), down: /%\s*down|\b(?:no|zero|\d+)\s*down\b/i.test(c),
-    points: /\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/i.test(c), type: /\b(?:conv|conventional|fha|va)\b/i.test(c), term: /\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)/i.test(c) });
+    points: /\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/i.test(c), type: /\b(?:conv|conventional|fha|va|jumbo)\b/i.test(c), term: /\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b(?!\s*arm)/i.test(c),
+    product: /\bfixed\b|\barm\b|adjustable/i.test(c) });
   let specs = [];
   for (const group of text.split(VS)) {
     let cur = null;
@@ -1180,30 +1213,32 @@ function optionSpecs(text) {
 }
 // Clean option names like "30 Yr Fixed - 1 Point" or "FHA 30 Yr Fixed - 3.5% Down", showing only what differs or was typed
 function nameOptions(opts) {
-  const showType = opts.some((o) => o.s.type !== "conv"), showPts = opts.some((o) => o.typed.points), downs = new Set(opts.map((o) => o.s.downPct));
+  const showType = new Set(opts.map((o) => o.s.type)).size > 1, showPts = opts.some((o) => o.typed.points), downs = new Set(opts.map((o) => o.s.downPct));
   const showDown = opts.some((o) => o.typed.down) && (downs.size > 1 || !showPts);
   const ptsTxt = (p) => `${+p} Point${+p === 1 ? "" : "s"}`;
   const names = opts.map((o) => {
     const s = o.s, det = [];
     if (showPts) det.push(ptsTxt(s.points));
     if (showDown) det.push(`${+s.downPct}% Down`);
-    return (showType ? { conv: "Conv", fha: "FHA", va: "VA" }[s.type] + " " : "") + `${s.term} Yr Fixed` + (det.length ? " - " + det.join(", ") : "");
+    return (showType ? { conv: "Conv", jumbo: "Jumbo", fha: "FHA", va: "VA" }[s.type] + " " : "") + (s.arm ? `${s.arm}/6 ARM` : `${s.term} Yr Fixed`) + (det.length ? " - " + det.join(", ") : "");
   });
   // still the same name twice: add the rate
   opts.forEach((o, i) => { o.s.name = names.filter((n) => n === names[i]).length > 1 ? `${names[i]} at ${+o.s.rate}%` : names[i]; });
 }
 function parseOption(sp, base) {
   const low = sp.toLowerCase(), num = (re) => { const m = low.match(re); return m ? parseFloat(m[1]) : null; };
-  const type = /\bfha\b/.test(low) ? "fha" : /\bva\b/.test(low) ? "va" : "conv";
+  const type = /\bfha\b/.test(low) ? "fha" : /\bva\b/.test(low) ? "va" : /\bjumbo\b/.test(low) ? "jumbo" : "conv";
+  // "7/6 ARM", "7 yr ARM", "10-year ARM"; a bare "ARM" is read as 7/6
+  const am = low.match(/\b(3|5|7|10)\s*(?:\/\s*\d+|-?\s*(?:yr|year)s?)?\s*(?:arm|adjustable)\b/), arm = am ? +am[1] : /\barm\b|adjustable/.test(low) ? 7 : 0;
   let points = /\b(no|zero|0)\s*(points?|pts?)\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/);
   let down = /\b(no|zero)\s*down\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*%?\s*down\b/);
-  const term = num(/\b(10|15|20|25|30)\s*-?\s*(?:yr|year|years)\b/);
+  const term = num(/\b(10|15|20|25|30)\s*-?\s*(?:yr|year|years)\b(?!\s*(?:arm|adjustable))/);
   let rate = num(/(?:\b(?:rate|at)\b|@)\s*(\d+(?:\.\d+)?)\s*%?/) ?? num(/(\d+(?:\.\d+)?)\s*%(?!\s*down)/);
   if (rate !== null && (rate < 1 || rate > 15)) rate = null;
   const guessed = rate === null;
-  if (guessed) rate = base.rate - (type === "fha" ? 0.25 : type === "va" ? 0.375 : 0) - ((term || 30) <= 15 ? 0.5 : 0) - 0.25 * (points || 0);
+  if (guessed) rate = base.rate - (type === "fha" ? 0.25 : type === "va" ? 0.375 : 0) - ((term || 30) <= 15 ? 0.5 : 0) - 0.25 * (points || 0) - (arm ? 0.5 : 0);
   if (down === null) down = type === "fha" ? 3.5 : type === "va" ? 0 : base.downPct;
-  return { guessed, typed: { points: points !== null, down: /\bdown\b/.test(low) }, s: { name: "", type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, fees: base.fees, downPct: down,
+  return { guessed, src: sp, typed: { points: points !== null, down: /\bdown\b/.test(low) }, s: { name: "", type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, arm, fees: base.fees, downPct: down,
     mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
@@ -1269,12 +1304,26 @@ function quickDraft(text) {
     const pick = pool.find((t) => refi ? /refi/i.test(t.name) : condo ? /condo/i.test(t.name) : !/refi|condo/i.test(t.name)) || pool[0];
     if (pick) applyFeeTemplate(pick);
   }
+  // County, for the conforming loan limit: "Eagle County" (a high-cost county) or any "<name> County"
+  let county = null;
+  if (st) county = Object.keys(CLL_HIGH[st] || {}).find((c) => new RegExp("\\b" + c.replace(/[.'\\]/g, ".") + "\\s+county\\b", "i").test(text)) || null;
+  if (!county) { const cm = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+County\b/); if (cm) county = cm[1]; }
+  file.county = county || undefined; file.st = st || undefined;
   // Use the options exactly as typed when there are at least two; otherwise fall back to a common comparison
   const specs = optionSpecs(text);
   let optText, guessed = false;
+  const overLimit = [];
   if (specs.length >= 2) {
     const base = { ...state.scenarios[0] };
     const opts = specs.map((sp) => parseOption(sp, base));
+    // Conventional loans over the county limit are jumbo (no mortgage insurance); "jumbo" anywhere in the text means all of them
+    const allJumbo = /\bjumbo\b/i.test(text) && !opts.some((o) => /\bjumbo\b/i.test(o.src));
+    for (const o of opts) {
+      if (o.s.type !== "conv") continue;
+      const lc = loanClass(state.price * (1 - o.s.downPct / 100), st, county);
+      if (allJumbo || lc.kind === "jumbo") { o.s.type = "jumbo"; o.s.mi = 0; }
+      else if (lc.kind === "unknown") overLimit.push(o);
+    }
     nameOptions(opts);
     guessed = opts.some((o) => o.guessed);
     state.scenarios = opts.map((o) => o.s); renderCards(); render();
@@ -1299,13 +1348,20 @@ function quickDraft(text) {
     addCalc("amort", ex, true);
     added.push("extra payments" + (extraYearN ? ` (${extraYearN} extra payment${extraYearN === 1 ? "" : "s"} a year, ${usd.format(Math.round(extraYearN * a.pi))})` : extraMonth ? ` (${usd.format(extraMonth)} a month)` : ""));
   }
-  if (/\barm\b|adjustable/i.test(text)) { addCalc("arm", null, true); added.push("ARM vs fixed"); }
+  if (/\barm\b|adjustable/i.test(text)) {
+    // Fill the ARM tab from the typed options: the first ARM against the first fixed loan
+    const a = state.scenarios.find((x) => x.arm), f = state.scenarios.find((x) => !x.arm), ex = {};
+    if (a) Object.assign(ex, { loan: Math.round(analyze(a).loan), armRate: a.rate, fixedYrs: a.arm, term: a.term });
+    if (f) Object.assign(ex, { fixedRate: f.rate, flatRate: f.rate });
+    addCalc("arm", ex, true); added.push("ARM vs fixed");
+  }
   if (/over ?ask|\bbid\b/i.test(text)) { addCalc("equity", { mode: "bid" }, true); added.push("bid over asking"); }
   else if (/\bequity\b|apprec/i.test(text)) { addCalc("equity", null, true); added.push("equity & appreciation"); }
   if (/\binvest(ment|or)?\b|\brental\b/i.test(text)) { addCalc("invest", null, true); added.push("investment property"); }
   if (added.length) drawTabs();
   const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
-  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
+  const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
+  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
 }
 $("quickForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $("quickIn").value.trim(); if (v) { quickDraft(v); $("quickIn").value = ""; } });
 
