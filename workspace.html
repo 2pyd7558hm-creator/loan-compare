@@ -1151,18 +1151,29 @@ const OPT_FEATURE = /\d\s*%|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b|\b(
 const OPT_COUNT = /\b(\d|two|three|four)\s+(?:scenarios|options|loans|loan options)\b/i;
 function optionSpecs(text) {
   // Break the text into short phrases: sentences, commas (not inside $450,000), " - ", "vs", "then"
-  const SPLIT = /(?<!\d)\.(?!\d)|[;\n]|,(?!\d{3})|\s[-–—]\s|\s+(?:vs\.?|versus|compared (?:to|with)|then)\s+/i;
+  const SPLIT = /(?<!\d)\.(?!\d)|[;\n]|,(?!\d{3})|\s[-–—]\s|\s+then\s+/i, VS = /\s+(?:vs\.?|versus|compared (?:to|with))\s+/i;
+  // Which loan details a phrase names, so "20% down, 7.375%" reads as one option (a down payment and its rate)
+  const feats = (c) => ({ rate: /\d\s*%(?!\s*down)|\b(?:at|rate)\s*\d/i.test(c), down: /%\s*down|\b(?:no|zero|\d+)\s*down\b/i.test(c),
+    points: /\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/i.test(c), type: /\b(?:conv|conventional|fha|va)\b/i.test(c), term: /\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)/i.test(c) });
   let specs = [];
-  for (const c of text.split(SPLIT).map((x) => (x || "").trim()).filter(Boolean)) {
-    // "30 yr fixed at 7%, with 1 point": a phrase that starts with "with"/"at"/"plus" finishes the option before it
-    if (specs.length && /^(?:with|at|plus|and with)\b/i.test(c) && !/\b(?:conv|conventional|fha|va)\b|\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)/i.test(c)) specs[specs.length - 1] += " " + c;
-    else if (OPT_FEATURE.test(c)) specs.push(c);
+  for (const group of text.split(VS)) {
+    let cur = null;
+    for (const raw of group.split(SPLIT).map((x) => (x || "").trim()).filter(Boolean)) {
+      // "no points and 1.5 points" / "7.375% and 10% down": split lists when every part is a loan detail
+      const sub = raw.split(/\s+(?:and|or|&)\s+|\s*\/\s*/i).map((x) => x.trim()).filter(Boolean);
+      for (const c of sub.length > 1 && sub.every((x) => OPT_FEATURE.test(x)) ? sub : [raw]) {
+        const f = feats(c);
+        // A phrase that adds details the option before it doesn't have yet finishes that option ("30 yr fixed at 7%, with 1 point")
+        if (cur && (OPT_FEATURE.test(c) || /^(?:with|at|plus)\b/i.test(c)) && !Object.keys(f).some((k) => f[k] && cur.f[k])) {
+          cur.text += " " + c; Object.keys(f).forEach((k) => { cur.f[k] = cur.f[k] || f[k]; });
+        } else if (OPT_FEATURE.test(c)) { cur = { text: c, f }; specs.push(cur); }
+      }
+    }
   }
+  specs = specs.map((x) => x.text);
   // typed without commas ("John Smith 450k CO no points vs ..."): start the first option at its first loan word
   const m0 = specs[0] && specs[0].match(/\b(?:no|zero|conv|conventional|fha|va|buy ?down|\d+(?:\.\d+)?\s*(?:%|points?|pts?|-?\s*(?:yr|year)s?\b))/i);
   if (m0 && m0.index > 0) specs[0] = specs[0].slice(m0.index);
-  // "no points and 1.5 points" / "15 or 30 year" style lists
-  specs = specs.flatMap((sp) => { const sub = sp.split(/\s+(?:and|or|&)\s+|\s*\/\s*/i).map((x) => x.trim()).filter(Boolean); return sub.length > 1 && sub.every((x) => OPT_FEATURE.test(x)) ? sub : [sp]; });
   // "a loan comparison with 2 scenarios": keep exactly that many
   const cm = text.match(OPT_COUNT), want = cm ? ({ two: 2, three: 3, four: 4 }[cm[1].toLowerCase()] || +cm[1]) : 4;
   return specs.slice(0, Math.min(4, want || 4));
@@ -1197,7 +1208,7 @@ function parseOption(sp, base) {
 }
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 function quickDraft(text) {
-  const parts = text.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+  const parts = text.split(/,(?!\d{3})|[;\n]+/).map((x) => x.trim()).filter(Boolean);
   const low = text.toLowerCase();
   let price = null, st = null, name = null;
   // Extras for the other calculators: "rent 2400", "income 95k", "wait" / "cost of waiting", "afford"
