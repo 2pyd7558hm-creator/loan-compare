@@ -720,7 +720,110 @@ const INVEST = {
   }
 };
 
-const CALCS = { cow: COW, rvb: RVB, aff: AFF, debt: DEBT, amort: AMORT, arm: ARM, equity: EQUITY, invest: INVEST };
+/* ---------- Cost of paying cash vs financing ----------
+   Both paths buy the same home, so the home's value cancels out. Each path's cost over N years is
+   what it leaves you poorer than if you'd kept all the money invested:
+   - Paying cash: taxes, penalties and fees to get the money out, plus the growth that money would have earned.
+   - Financing: the same for the (smaller) down payment and closing costs, plus interest after any tax savings,
+     plus the growth the monthly payments would have earned if invested instead (the cash buyer has no payment),
+     plus the loan balance still owed. Line items add up to the difference in net worth between the two paths. */
+const CASH = {
+  label: "Cost of paying cash", tag: "Cost of paying cash",
+  title: () => "Paying cash vs financing",
+  intro: () => "Paying cash avoids interest, but it isn't free: moving the money can trigger taxes, penalties and fees, and the money stops growing once it's in the house. This puts both sides next to each other.",
+  note: "Cost of paying cash is an estimate. It assumes the money would otherwise earn the return shown every year, that monthly payments you'd skip by paying cash would be invested at that return, and that taxes on investments and retirement withdrawals are paid from the account. Taxes, penalties and deductions depend on your situation, so please talk with your tax advisor or financial planner before moving money.",
+  blank: (b) => ({ price: b.price || 450000, downPct: b.downPct ?? 20, rate: b.rate || 6.5, term: 30, closing: Math.round((b.price || 450000) * 0.02 / 100) * 100,
+    inv: 0, gainPct: 40, cgRate: 15, ret: 0, incRate: 22, under59: 1, fees: 0, ret_r: 7, deduct: 0, years: 10 }),
+  mount(sec, d, changed) {
+    sec.innerHTML = `
+      <div class="calc-head"><h2>The home and the loan</h2></div>
+      <div class="panel fields calc-in">
+        ${numIn("Home price", "price", d, { pre: "$", step: 1000 })}
+        ${numIn("Down payment if financing", "downPct", d, { suf: "%", step: 1 })}
+        ${numIn("Interest rate", "rate", d, { suf: "%", step: 0.125 })}
+        ${selIn("Term", "term", d, [[30, "30 years"], [20, "20 years"], [15, "15 years"]])}
+        ${numIn("Loan closing costs", "closing", d, { pre: "$", step: 100 })}
+        ${numIn("Tax savings on interest", "deduct", d, { suf: "% if you itemize", step: 1 })}
+      </div>
+      <div class="calc-head"><h2>Where the cash would come from</h2></div>
+      <div class="panel fields calc-in">
+        ${numIn("From investments (brokerage)", "inv", d, { pre: "$", step: 1000 })}
+        ${numIn("Part of that which is gains", "gainPct", d, { suf: "%", step: 5 })}
+        ${numIn("Capital gains tax rate", "cgRate", d, { suf: "%", step: 1 })}
+        ${numIn("From retirement (401k, IRA)", "ret", d, { pre: "$", step: 1000 })}
+        ${numIn("Income tax rate on withdrawals", "incRate", d, { suf: "%", step: 1 })}
+        ${selIn("Under 59½?", "under59", d, [[1, "Yes (10% penalty)"], [0, "No"]])}
+        ${numIn("Other fees or penalties", "fees", d, { pre: "$", step: 100 })}
+        ${numIn("Return that money earns", "ret_r", d, { suf: "% / yr", step: 0.5 })}
+        <p class="f wide est" id="cashSav"></p>
+      </div>
+      <div class="results-head"><h2 id="cashH"></h2><div><span class="seg-label">Compare over</span>${segIn("years", d, [5, 10, 15, 30], "yrs")}</div></div>
+      <div class="highlights" id="cashHl"></div>
+      <p class="verdict" id="cashSay"></p>
+      <div class="table-wrap"><table id="cashTable"></table></div>
+      <div class="charts one"><div class="chart"><h3>Total cost over time</h3><p>What each choice has cost you by each year, counting taxes, fees, interest and the growth given up.</p><div id="cashChart"></div>
+        <div class="legend"><span><i style="background:var(--s4)"></i>Paying cash</span><span><i style="background:var(--s1)"></i>Financing</span></div></div></div>`;
+    const compute = () => {
+      const P = +d.price || 0, dp = Math.min(100, +d.downPct || 0) / 100, D = P * dp, L = P - D, CC = L > 0 ? (+d.closing || 0) : 0;
+      const inv = Math.min(+d.inv || 0, P), ret = Math.min(+d.ret || 0, P - inv), sav = P - inv - ret;
+      const invTax = (+d.gainPct || 0) / 100 * (+d.cgRate || 0) / 100, retTax = (+d.incRate || 0) / 100, pen = +d.under59 ? 0.1 : 0;
+      // Take `need` from savings first, then investments, then retirement; gross up for what's owed on the way out
+      const pull = (need, fee) => {
+        const s = Math.min(need, sav), i = Math.min(need - s, inv), r = Math.min(need - s - i, ret);
+        const ig = invTax < 1 ? i / (1 - invTax) : i, rg = retTax + pen < 1 ? r / (1 - retTax - pen) : r;
+        return { gross: s + ig + rg + fee, tax: ig - i + (rg - r) * (retTax / ((retTax + pen) || 1)), pen: (rg - r) * (pen / ((retTax + pen) || 1)), fee };
+      };
+      const c = pull(P, +d.fees || 0), f = pull(Math.min(D + CC, P + CC), 0);
+      const g = Math.pow(1 + (+d.ret_r || 0) / 100, 1 / 12) - 1, t = (+d.deduct || 0) / 100, pi = pmt(L, d.rate, d.term), n = d.term * 12, rm = d.rate / 1200;
+      const cashV = [], finV = [], rows = [];
+      let bal = L, fvPay = 0, paid = 0, intSum = 0, taxSave = 0;
+      for (let m = 0; m <= MONTHS; m++) {
+        if (m > 0 && m <= n && bal > 0) {
+          const int = bal * rm, prin = Math.min(bal, pi - int), net = int + prin - int * t;
+          bal -= prin; intSum += int; taxSave += int * t; paid += net; fvPay = fvPay * (1 + g) + net;
+        } else if (m > 0) fvPay *= 1 + g;
+        const grow = Math.pow(1 + g, m);
+        cashV.push(c.gross * grow - P); finV.push(f.gross * grow - P + fvPay + bal);
+        if (m === d.years * 12) rows.push({ grow, bal, fvPay, paid, intSum, taxSave });
+      }
+      const h = d.years * 12, x = rows[0], costC = cashV[h], costF = finV[h], diff = costC - costF;
+      const neg = (v) => (v < 0 ? "−" : "") + usd.format(Math.abs(v));
+      sec.querySelector("#cashSav").textContent = sav > 0 ? `The other ${usd.format(sav)} comes from savings, with no tax or penalty to move it.` : "";
+      sec.querySelector("#cashH").textContent = `Over ${d.years} years`;
+      sec.querySelector("#cashHl").innerHTML =
+        hlBox("Cost of paying cash", neg(costC), `${usd.format(c.gross - P)} to move the money + ${usd.format(c.gross * (x.grow - 1))} growth given up`, diff > 0 ? "" : "good") +
+        hlBox("Cost of financing", neg(costF), `interest, closing costs and growth given up`, diff > 0 ? "good" : "") +
+        hlBox(diff > 0 ? "Financing saves" : "Paying cash saves", usd.format(Math.abs(diff)), `over ${d.years} years`) +
+        hlBox("Kept invested by financing", usd.format(Math.max(0, c.gross - f.gross)), `instead of going into the house`);
+      const pctS = (v) => pct(v, 2);
+      sec.querySelector("#cashSay").innerHTML = Math.abs(diff) < 1000
+        ? `Over ${d.years} years the two come out about even, so it comes down to how much you value having the cash on hand.`
+        : diff > 0
+          ? `If the money earns about ${pctS(+d.ret_r || 0)} a year, <b>financing costs about ${usd.format(diff)} less</b> than paying cash over ${d.years} years, and you keep ${usd.format(Math.max(0, c.gross - f.gross))} working for you instead of tied up in the house.`
+          : `With a ${pct(+d.rate)} rate and the money earning about ${pctS(+d.ret_r || 0)} a year, <b>paying cash costs about ${usd.format(-diff)} less</b> over ${d.years} years.${c.gross - P > 0 ? ` That's after ${usd.format(c.gross - P)} in taxes, penalties and fees to move the money.` : ""}`;
+      const row = (l, a, b, cls = "") => `<tr class="${cls}"><td>${l}</td><td>${a}</td><td>${b}</td></tr>`;
+      const dash = "–", m0 = (v) => v > 0.5 ? usd.format(v) : dash;
+      sec.querySelector("#cashTable").innerHTML = `<thead><tr><th></th><th>Pay cash</th><th>Finance ${pct(+d.downPct || 0)} down</th></tr></thead><tbody>
+        ${row("Cash out of your accounts", usd.format(c.gross), usd.format(f.gross))}
+        ${row("Taxes to move the money", m0(c.tax), m0(f.tax))}
+        ${row("Early withdrawal penalty", m0(c.pen), m0(f.pen))}
+        ${row("Other fees or penalties", m0(c.fee), dash)}
+        ${row("Loan closing costs", dash, m0(CC))}
+        ${row(`Growth given up on that cash, ${d.years} yrs`, usd.format(c.gross * (x.grow - 1)), usd.format(f.gross * (x.grow - 1)))}
+        ${row(`Interest paid, ${d.years} yrs`, dash, m0(x.intSum))}
+        ${t ? row("Less tax savings on interest", dash, "−" + usd.format(x.taxSave)) : ""}
+        ${row("Growth the payments could have earned", dash, m0(x.fvPay - x.paid))}
+        ${row(`Total cost over ${d.years} years`, neg(costC), neg(costF), "strong")}
+        ${row("Monthly principal and interest", dash, usd.format(pi))}
+        ${row(`Loan balance at ${d.years} yrs`, dash, usd.format(x.bal))}</tbody>`;
+      [...sec.querySelectorAll("#cashTable tbody tr.strong td")].slice(1).forEach((td, i) => { if ((i ? costF : costC) === Math.min(costC, costF)) td.classList.add("best"); });
+      lineChart(sec.querySelector("#cashChart"), [{ color: "--s4", values: cashV }, { color: "--s1", values: finV }], h);
+    };
+    wireCalc(sec, d, compute, changed);
+  }
+};
+
+const CALCS = { cow: COW, rvb: RVB, aff: AFF, debt: DEBT, amort: AMORT, arm: ARM, equity: EQUITY, invest: INVEST, cash: CASH };
 // Shown as bubbles. Calculators without a module yet show as "coming soon".
 const BUBBLES = [["compare", "Loan comparison"], ["cow", "Cost of waiting"], ["rvb", "Rent vs buy"], ["aff", "Affordability"],
-  ["debt", "Debt consolidation"], ["amort", "Extra payments"], ["arm", "ARM vs fixed"], ["equity", "Equity & appreciation"], ["invest", "Investment property"]];
+  ["debt", "Debt consolidation"], ["amort", "Extra payments"], ["arm", "ARM vs fixed"], ["equity", "Equity & appreciation"], ["invest", "Investment property"], ["cash", "Cost of paying cash"]];
