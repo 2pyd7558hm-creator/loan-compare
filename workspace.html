@@ -362,7 +362,6 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
               <input id="shareUrl" readonly aria-label="Client link">
               <button class="btn" id="copyBtn" type="button">Copy link</button>
               <button class="btn" id="msgBtn" type="button" title="Copies a short note with the link, to paste into an email, text or Messages">Copy message</button>
-              <button class="btn" id="mailBtn" type="button">Email link</button>
             </div>
             <div class="present-row" id="presentRow" hidden>
               <button class="btn" id="presentBtn" type="button">Present live</button>
@@ -1072,7 +1071,7 @@ async function staffView(session) {
   const { data: ok } = await sb.rpc("is_staff");
   if (!ok) { lock(true); show("vLogin"); say("loginStatus", "This login isn't set up as staff yet. Ask the account owner to add you.", true); return; }
   $("whoAmI").textContent = session.user.email;
-  presenterName = await staffFirstName(session.user);
+  presenterName = await staffFirstName(session.user); signedInEmail = session.user.email || "";
   lock(false); show("vStaff"); $("hubSec").hidden = false;
   await loadList();
   newComparison();
@@ -1336,7 +1335,7 @@ function resolvePath(ref) {
   return el;
 }
 // First name shown on the pointer: the staff table's display_name, else a known name for the email, else "Loan officer"
-let presenterName = "Loan officer";
+let presenterName = "Loan officer", signedInEmail = "";
 const KNOWN_NAMES = { dcramm: "David", scramm: "Stephanie" };
 async function staffFirstName(user) {
   try {
@@ -1545,16 +1544,13 @@ $("delBtn").addEventListener("click", () => { $("delConfirm").hidden = false; })
 $("delNo").addEventListener("click", () => { $("delConfirm").hidden = true; });
 $("delYes").addEventListener("click", del);
 $("shareOn").addEventListener("change", (e) => setShared(e.target.checked));
-// Email link: opens your own email app, addressed to every client email (commas, semicolons or spaces between them)
-const splitEmails = (v) => (v || "").split(/[\s,;:]+/).map((x) => x.trim()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
-// The note the client gets, used by both Email link and Copy message. Nothing is ever sent from this page:
-// Email link opens your own email app with it filled in, and Copy message puts it on the clipboard.
+// The note for the client. Copy message puts it on the clipboard to paste into Outlook, a text or Messages; nothing is sent from this page.
+// It's signed by whoever is signed in.
 function clientMessage() {
   const first = ($("cName").value.trim().split(/\s+/)[0]) || "there";
   const onlyCompare = file.calcs.filter(isShared).every((c) => c.kind === "compare");
-  const subject = (onlyCompare ? "Your loan comparison" : "Your home loan numbers") + ($("cTitle").value.trim() ? " – " + $("cTitle").value.trim() : "");
-  const body = `Hi ${first},\n\n${onlyCompare ? "Here are the loan options we talked about." : "Here are the numbers we went over."} You can open them any time with this private link:\n${$("shareUrl").value}\n\nLet me know if you have any questions.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}`;
-  return { subject, body };
+  const body = `Hi ${first},\n\n${onlyCompare ? "Here are the loan options we talked about." : "Here are the numbers we went over."} You can open them any time with this private link:\n${$("shareUrl").value}\n\nLet me know if you have any questions.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}${signedInEmail ? "\n" + signedInEmail : ""}`;
+  return { body };
 }
 $("msgBtn").addEventListener("click", async () => {
   const { body } = clientMessage();
@@ -1562,14 +1558,8 @@ $("msgBtn").addEventListener("click", async () => {
   catch {
     const ta = document.createElement("textarea"); ta.value = body; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select();
     const ok = document.execCommand("copy"); ta.remove();
-    say("saveStatus", ok ? "Message copied. Paste it into an email, a text or Messages." : "Couldn't copy here. Use Email link instead.", !ok);
+    say("saveStatus", ok ? "Message copied. Paste it into an email, a text or Messages." : "Couldn't copy here. Use Copy link instead.", !ok);
   }
-});
-$("mailBtn").addEventListener("click", () => {
-  const to = splitEmails($("cEmail").value);
-  const { subject, body } = clientMessage();
-  location.href = "mailto:" + to.map(encodeURIComponent).join(",") + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
-  if (!to.length) say("saveStatus", "No client email yet, so add the address in your email app.");
 });
 $("copyBtn").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("shareUrl").value); say("saveStatus", "Link copied."); }
