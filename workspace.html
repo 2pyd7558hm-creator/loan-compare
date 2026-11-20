@@ -341,8 +341,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
             <button class="btn" type="submit">Draft it</button>
           </form>
           <div class="client-fields">
-            <label class="f">Client name<input id="cName" type="text" autocomplete="off" placeholder="e.g. Jordan & Casey Smith"></label>
-            <label class="f">Client email(s) (optional)<input id="cEmail" type="text" inputmode="email" autocomplete="off" placeholder="one or more, separated by commas"></label>
+            <label class="f">Client name(s)<input id="cName" type="text" autocomplete="off" placeholder="e.g. Sam & Alex Ray, or Sam Ray and Alex Jones"></label>
             <label class="f wide">Title (client sees this)<input id="cTitle" type="text" placeholder="e.g. Purchase options, 123 Main St"></label>
             <label class="f wide">Private notes (client never sees these)<textarea id="cNotes"></textarea></label>
           </div>
@@ -367,7 +366,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
               <button class="btn" id="presentBtn" type="button">Present live</button>
               <span class="status" id="presentStatus">While your client has the link open, they see your changes, your pointer, and anything you click glow.</span>
             </div>
-            <span class="status">The link shows the loan options and results only, never the email or notes. Turn sharing off any time to disable it.</span>
+            <span class="status">The link shows the loan options and results only, never your notes. Turn sharing off any time to disable it.</span>
           </div>
         </div>
       </div>
@@ -1279,7 +1278,7 @@ function drawList() {
   });
 }
 function fillClient(r) {
-  $("cName").value = r ? r.client_name : ""; $("cEmail").value = r ? r.client_email || "" : "";
+  $("cName").value = r ? r.client_name : "";
   $("cTitle").value = r ? r.title || "" : ""; $("cNotes").value = r ? r.notes || "" : "";
   $("delBtn").hidden = !r; $("delConfirm").hidden = true; $("shareBox").hidden = !r;
   if (r) { $("shareOn").checked = r.shared; $("shareUrl").value = location.origin + location.pathname + "?c=" + r.share_token; $("shareRow").hidden = !r.shared; $("presentRow").hidden = !r.shared; }
@@ -1296,7 +1295,7 @@ async function openComparison(id) {
 async function save() {
   const name = $("cName").value.trim();
   if (!name) { say("saveStatus", "Add the client's name first.", true); $("cName").focus(); return; }
-  const fields = { client_name: name, client_email: $("cEmail").value.trim() || null, title: $("cTitle").value.trim() || null, notes: $("cNotes").value.trim() || null, data: getState() };
+  const fields = { client_name: name, title: $("cTitle").value.trim() || null, notes: $("cNotes").value.trim() || null, data: getState() };
   $("saveBtn").disabled = true; say("saveStatus", "Saving…");
   const q = current ? sb.from("comparisons").update(fields).eq("id", current.id) : sb.from("comparisons").insert(fields);
   const { data, error } = await q.select().single();
