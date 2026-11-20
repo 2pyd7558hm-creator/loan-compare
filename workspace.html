@@ -625,7 +625,7 @@ const COLORS = ["--s1", "--s2", "--s3", "--s4"];
 const LETTERS = ["A", "B", "C", "D"];
 const HORIZONS = [3, 5, 7, 10, 15, 30];
 const state = {
-  price: 450000, taxes: 5400, insurance: 1500, hoa: 0, appreciation: 3, horizon: 7,
+  price: 450000, taxes: 3600, insurance: 2480, hoa: 0, appreciation: 3, horizon: 7,
   closing: { template: "", items: [] },
   scenarios: [
     { name: "30-yr fixed, no points", type: "conv", term: 30, rate: 6.875, points: 0,    fees: 1495, downPct: 10,  mi: 0.45 },
@@ -801,8 +801,8 @@ function escPct(k) {
 function escrowHints() {
   for (const k of ["taxes", "insurance"]) { const el = $(k + "Hint"); if (el) el.textContent = state.price > 0 ? `${(escPct(k)).toFixed(2)}% of price, follows the price` : ""; }
 }
-// Starting points by state, as a percent of the price a year (effective property tax; homeowners insurance). Typed amounts win.
-const STATE_ESC = { CO: { tax: 0.5, ins: 0.55 } };
+// Default starting points are 0.80% taxes and 0.55% insurance (David's Colorado figures). By state, as a percent of the price a year (effective property tax; homeowners insurance). Typed amounts win.
+const STATE_ESC = { CO: { tax: 0.8, ins: 0.55 } };
 function stateEscrow(st) {
   const e = STATE_ESC[st]; if (!e) return;
   state.taxPct = e.tax; state.insPct = e.ins;
@@ -1145,7 +1145,7 @@ renderCards();
 render();
 </script>
 
-<script src="calcs.js?v=20261120g"></script>
+<script src="calcs.js?v=20261120h"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 /* ===== Workspace: connects the calculator to Supabase ===== */
