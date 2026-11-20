@@ -62,8 +62,10 @@ section > h2 { font-size: 18px; font-weight: 600; margin-bottom: 12px }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px }
 
 /* Inputs */
-.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px }
-label.f, div.f { display: grid; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--muted) }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; align-items: start }
+.card .fthb { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.35 }
+.card .fthb input { margin-top: 2px; width: auto; flex: none; padding: 0; min-height: 0 }
+label.f, div.f { display: grid; gap: 4px; align-content: start; font-size: 12.5px; font-weight: 500; color: var(--muted) }
 input, select { font: inherit; font-size: 15px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; width: 100%; min-width: 0 }
 input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px }
 .affix { position: relative }
@@ -652,7 +654,15 @@ function vaFee(downPct) { return downPct >= 10 ? 1.25 : downPct >= 5 ? 1.5 : 2.1
 // Most a seller can pay toward the buyer's costs, as a share of the price (interested party contribution limits):
 // conventional 3% over 90% LTV, 6% at 75-90%, 9% at 75% or less; FHA 6%; VA 4% (VA doesn't count normal closing costs toward it). Jumbo varies by lender.
 function sellerLimit(type, downPct) { return type === "fha" ? 6 : type === "va" ? 4 : type === "jumbo" ? null : downPct < 10 ? 3 : downPct < 25 ? 6 : 9; }
-function convPmi(downPct, termYrs) { return downPct >= 20 ? 0 : termYrs <= 15 ? 0.3 : downPct < 5 ? 0.62 : downPct < 10 ? 0.55 : downPct < 15 ? 0.45 : 0.3; }
+// fthb: first-time buyer with income at or under 80% of the area median (HomeReady / Home Possible). Over 90% LTV those
+// loans need 25% MI coverage instead of 30-35%, so the monthly MI is lower. A 3% down conventional loan is assumed to be one.
+function convPmi(downPct, termYrs, fthb) {
+  if (fthb === undefined) fthb = downPct < 5;
+  if (downPct >= 20) return 0;
+  if (fthb && downPct < 10 && termYrs > 15) return downPct < 5 ? 0.45 : 0.47;
+  return termYrs <= 15 ? 0.3 : downPct < 5 ? 0.62 : downPct < 10 ? 0.55 : downPct < 15 ? 0.45 : 0.3;
+}
+const miOf = (s) => convPmi(s.downPct, s.term, s.fthb);
 
 // Conforming loan limits for 2026, one-unit homes (FHFA, fullcountyloanlimitlist2026). Every county uses the $832,750 baseline
 // except the high-cost counties below; Alaska, Hawaii, Guam and the U.S. Virgin Islands start at $1,249,125.
@@ -787,6 +797,13 @@ function escPct(k) {
 function escrowHints() {
   for (const k of ["taxes", "insurance"]) { const el = $(k + "Hint"); if (el) el.textContent = state.price > 0 ? `${(escPct(k)).toFixed(2)}% of price, follows the price` : ""; }
 }
+// Starting points by state, as a percent of the price a year (effective property tax; homeowners insurance). Typed amounts win.
+const STATE_ESC = { CO: { tax: 0.5, ins: 0.55 } };
+function stateEscrow(st) {
+  const e = STATE_ESC[st]; if (!e) return;
+  state.taxPct = e.tax; state.insPct = e.ins;
+  if (state.price > 0) setPrice(state.price);
+}
 function setPrice(p) {
   escPct("taxes"); escPct("insurance");
   state.price = p;
@@ -828,6 +845,7 @@ function renderCards() {
         ${field("Down payment", "downPct", i, s, { suf: "%", step: 0.5 })}
         ${field(s.type === "fha" ? "Annual MIP (HUD)" : s.type === "va" ? "VA funding fee" : "PMI rate / yr", "mi", i, s, { suf: "%", step: 0.05 })}
       </div>
+      <label class="fthb" id="s${i}-fthbBox" hidden><input type="checkbox" data-i="${i}" data-k="fthb"${s.fthb ?? s.downPct < 5 ? " checked" : ""}> First-time buyer, income ≤ 80% of area median (HomeReady / Home Possible: lower MI)</label>
       <details class="more"${+s.credit || +s.bd || +s.amt2 ? " open" : ""}><summary>Seller credit, buydown, 2nd loan</summary>
         <div class="fields">
           ${field("Seller credit", "credit", i, s, { pre: "$", step: 500 })}
@@ -863,6 +881,7 @@ function syncMI(i) {
     tl.firstChild.textContent = !lc ? "Loan type" : lc.kind === "jumbo" ? "Loan type (over the limit: jumbo?)" : lc.kind === "high" ? "Loan type (high balance)" : lc.kind === "unknown" ? "Loan type (high balance or jumbo?)" : "Loan type";
   }
   const lbl = el.closest("label"); if (lbl && lbl.firstChild && lbl.firstChild.nodeType === 3) lbl.firstChild.textContent = label;
+  const fb = document.getElementById(`s${i}-fthbBox`); if (fb) { fb.hidden = !(s.type === "conv" && s.downPct < 10); fb.querySelector("input").checked = s.fthb ?? s.downPct < 5; }
 }
 
 $("cards").addEventListener("input", (e) => {
@@ -870,16 +889,17 @@ $("cards").addEventListener("input", (e) => {
   if (i === undefined) return;
   const s = state.scenarios[i];
   if (k === "rate") s.est = false;
+  if (k === "fthb") { s.fthb = t.checked; s.mi = miOf(s); syncMI(+i); render(); return; }
   if (k === "name") s[k] = t.value.replace(/\s*\n\s*/g, " ");
   else if (k === "type") {
     s.type = t.value;
     if (s.type === "fha" && s.downPct < 3.5) s.downPct = 3.5;
-    if (s.type === "conv") s.mi = convPmi(s.downPct, s.term);
+    if (s.type === "conv") s.mi = miOf(s);
     renderCards();
   }
   else if (k === "term") s.term = +t.value;
   else if (k === "mi" && t.disabled) return;
-  else { s[k] = +t.value || 0; }
+  else { s[k] = +t.value || 0; if (k === "downPct" && s.type === "conv") s.mi = miOf(s); }
   render();
   if (k === "type" || k === "term" || k === "arm") autoTitle();
 });
@@ -1121,7 +1141,7 @@ renderCards();
 render();
 </script>
 
-<script src="calcs.js?v=20261120f"></script>
+<script src="calcs.js?v=20261120g"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 /* ===== Workspace: connects the calculator to Supabase ===== */
@@ -1218,6 +1238,9 @@ function basicsOf() {
     if (c.kind === "compare") {
       b.price ??= d.price; b.taxes ??= d.taxes; b.insurance ??= d.insurance; b.hoa ??= d.hoa; b.rate ??= d.scenarios[0] && d.scenarios[0].rate; b.downPct ??= d.scenarios[0] && d.scenarios[0].downPct;
       b.term ??= d.scenarios[0] && d.scenarios[0].term;
+      // MI rate of that same option, so other tabs match its down payment
+      const s0 = d.scenarios[0];
+      if (s0 && b.mi == null) { const base = Math.max((d.price || 0) * (1 - s0.downPct / 100), 0); b.mi = s0.type === "fha" ? fhaMip(base, d.price, s0.term).rate : s0.type === "conv" ? (s0.downPct >= 20 ? 0 : +s0.mi || 0) : 0; }
       if (b.cashClose == null) b.cashClose = cashClosing();
       // Loan closing costs of the first option (points, lender and third-party fees), for the Cost of paying cash tab
       if (b.closing == null && d.scenarios[0]) { try { const a = analyze(d.scenarios[0]); b.closing = Math.round(a.pointsCost + a.lenderFees + a.cc.other); } catch (e) { /* leave the estimate */ } }
@@ -1430,10 +1453,11 @@ function nameOptions(opts) {
     const s = o.s, det = [];
     if (showPts) det.push(ptsTxt(s.points));
     if (showDown) det.push(`${+s.downPct}% Down`);
-    return (showType ? { conv: "Conv", jumbo: "Jumbo", fha: "FHA", va: "VA" }[s.type] + " " : "") + (s.arm ? `${s.arm}/6 ARM` : `${s.term} Yr Fixed`) + (det.length ? " - " + det.join(", ") : "");
+    const bd = s.bd || o.bd;
+    return (showType ? { conv: "Conv", jumbo: "Jumbo", fha: "FHA", va: "VA" }[s.type] + " " : "") + (s.arm ? `${s.arm}/6 ARM` : `${s.term} Yr Fixed`) + (det.length ? " - " + det.join(", ") : "") + (bd ? `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[bd]} Buydown` : "");
   });
-  // still the same name twice: add the rate
-  opts.forEach((o, i) => { o.s.name = names.filter((n) => n === names[i]).length > 1 ? `${names[i]} at ${+o.s.rate}%` : names[i]; });
+  // Names never carry the rate (the rate has its own row); the letters A, B, C tell twins apart
+  opts.forEach((o, i) => { o.s.name = names[i]; });
 }
 function parseOption(sp, base) {
   const low = sp.toLowerCase(), num = (re) => { const m = low.match(re); return m ? parseFloat(m[1]) : null; };
@@ -1505,7 +1529,8 @@ function noteBasics(text) {
     const up = p.toUpperCase().replace(/\./g, "");
     if (!st && US_STATES.includes(up) && up !== "VA") { st = up; continue; }
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
-    if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
+    // a street address starts with a number, but "700 score", "2 extra payments" or "3000 rent" aren't addresses
+    if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p) && !/\b(score|fico|credit|mid|extra|payments?|rent|income|months?|days?|units?|beds?|baths?|kids?|years?|people)\b/i.test(p)) { addr = p; continue; }
     let q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
     // "Stephanie Jones Purchase": keep the name, drop the loan words after it (needs two name words first, so "Eagle County" isn't a name)
     const qw = q.split(/\s+/), cut = qw.findIndex((w) => NAME_STOP.test(w.replace(/[.]/g, "")));
@@ -1581,7 +1606,6 @@ function quickDraft(text, ai) {
     opts.forEach((o) => { if (o.bd) o.s.bd = o.bd; if (credit) o.s.credit = Math.round(credit); if (amt2 >= 1000) Object.assign(o.s, { amt2, rate2: dr ? +dr[1] : 0, term2: dr ? 30 : 0 }); });
     // The AI reader can tie a seller credit or a 2nd loan to one option
     opts.forEach((o) => { const x = o.ai; if (!x) return; if (x.seller_credit) o.s.credit = Math.round(x.seller_credit); if (x.second_amount >= 1000) Object.assign(o.s, { amt2: Math.round(x.second_amount), rate2: x.second_rate || 0, term2: x.second_rate ? 30 : 0 }); });
-    opts.forEach((o) => { if (o.bd) o.s.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.bd]} Buydown`; });
     guessed = opts.some((o) => o.guessed);
     draftInfo.guessed = opts.map((o, i) => o.guessed ? i : -1).filter((i) => i >= 0);
     opts.forEach((o) => { o.s.est = !!o.guessed; });
@@ -1596,6 +1620,7 @@ function quickDraft(text, ai) {
   // State's FHFA home value growth (5-yr average) for the equity chart
   if (st && fhfaRate(st, DEFAULT_SRC) !== null) { state.appreciation = fhfaRate(st, DEFAULT_SRC); $("appreciation").value = state.appreciation; render(); }
   file.st = st || undefined; file.rent = rent || undefined;
+  if (st) stateEscrow(st);
   const added = calcsFromNote(text, { refi, rent, income, extraYearN, extraMonth, specs });
   if (added.length) drawTabs();
   draftInfo.overLimit = overLimit.length;
@@ -1680,7 +1705,7 @@ function followUp(text) {
       const base = { ...state.scenarios[0] }, opts = specs.slice(0, room).map((sp) => parseOption(sp, base));
       for (const o of opts) {
         if (o.s.type === "conv" && loanClass(state.price * (1 - o.s.downPct / 100), file.st, file.county).kind === "jumbo") { o.s.type = "jumbo"; o.s.mi = 0; }
-        o.s.name = (o.s.type === "conv" ? "" : { jumbo: "Jumbo ", fha: "FHA ", va: "VA " }[o.s.type]) + (o.s.arm ? `${o.s.arm}/6 ARM` : `${o.s.term} Yr Fixed`) + (o.typed.points ? ` - ${+o.s.points} Point${+o.s.points === 1 ? "" : "s"}` : "") + (o.typed.down ? ` - ${+o.s.downPct}% Down` : "") + ` at ${+o.s.rate}%`;
+        o.s.name = (o.s.type === "conv" ? "" : { jumbo: "Jumbo ", fha: "FHA ", va: "VA " }[o.s.type]) + (o.s.arm ? `${o.s.arm}/6 ARM` : `${o.s.term} Yr Fixed`) + (o.typed.points ? ` - ${+o.s.points} Point${+o.s.points === 1 ? "" : "s"}` : "") + (o.typed.down ? ` - ${+o.s.downPct}% Down` : "");
         if (o.bd) { o.s.bd = o.bd; o.s.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.bd]} Buydown`; }
       }
       state.scenarios.push(...opts.map((o) => o.s)); renderCards(); render(); syncActive(); autoTitle();
@@ -1839,7 +1864,7 @@ function applyChat(res) {
   const sc = state.scenarios;
   for (const a of acts) {
     if (a.op === "set_price" && a.value >= 10000) setPrice(Math.round(a.value));
-    else if (a.op === "set_location") { if (a.state && US_STATES.includes(a.state.toUpperCase())) file.st = a.state.toUpperCase(); if (a.county) file.county = a.county.replace(/\s+county$/i, "").trim(); }
+    else if (a.op === "set_location") { if (a.state && US_STATES.includes(a.state.toUpperCase())) { const ns = a.state.toUpperCase(); if (ns !== file.st) { file.st = ns; stateEscrow(ns); } } if (a.county) file.county = a.county.replace(/\s+county$/i, "").trim(); }
     else if (a.op === "set_refi") $("cTitle").value = $("cTitle").value.replace(/^(Refinance|Purchase) options/i, a.flag ? "Refinance Options" : "Purchase Options");
   }
   const edit = (x, a) => {
@@ -1867,10 +1892,9 @@ function applyChat(res) {
   sc.forEach((x) => {
     if (x.type === "fha" && x.downPct < 3.5) x.downPct = 3.5;
     if (x.type === "conv") { const lc = loanClass(state.price * (1 - x.downPct / 100), file.st, file.county); if (lc.kind === "jumbo") x.type = "jumbo"; }
-    x.mi = x.type === "conv" ? convPmi(x.downPct, x.term) : x.type === "fha" ? (x.mi || 0.55) : 0;
+    x.mi = x.type === "conv" ? miOf(x) : x.type === "fha" ? (x.mi || 0.55) : 0;
   });
   nameOptions(sc.map((x) => ({ s: x, typed: { points: sc.some((y) => y.points > 0), down: true } })));
-  sc.forEach((x) => { if (x.bd) x.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[x.bd]} Buydown`; });
   renderCards(); render(); syncActive(); autoTitle();
   let added = null;
   for (const a of acts.filter((x) => x.op === "add_calc" && x.calc && x.calc !== "none")) added = addCalcKind(a.calc, a.value) || added;
