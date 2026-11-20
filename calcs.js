@@ -50,7 +50,9 @@ function wireCalc(sec, data, compute, changed) {
   };
   sec.oninput = (e) => {
     const t = e.target, k = t.dataset.k; if (!k) return;
-    data[k] = t.tagName === "SELECT" || t.type === "text" ? t.value : (t.value === "" ? 0 : +t.value);
+    const val = t.type === "checkbox" ? t.checked : t.tagName === "SELECT" || t.type === "text" ? t.value : (t.value === "" ? 0 : +t.value);
+    if (t.dataset.row !== undefined) { data[t.dataset.list][+t.dataset.row][k] = val; compute(); changed(); return; }
+    data[k] = val;
     if (k === "program") { data.mi = data.program === "va" ? 0 : 0.55; const mi = sec.querySelector('[data-k="mi"]'); if (mi) mi.value = data.mi; }
     sync(); compute(); changed();
   };
@@ -309,7 +311,171 @@ const AFF = {
   }
 };
 
-const CALCS = { cow: COW, rvb: RVB, aff: AFF };
+/* ---------- Debt consolidation (refinance) with blended rate ---------- */
+// Months and total interest to pay off `bal` at `ratePct` with a fixed monthly payment
+function payoff(bal, ratePct, pay) {
+  const r = ratePct / 1200; let b = bal, m = 0, int = 0;
+  if (pay <= b * r) return { months: Infinity, interest: Infinity };
+  while (b > 0.005 && m < 1200) { const i = b * r; int += i; b -= Math.min(pay - i, b); m++; }
+  return { months: m, interest: int };
+}
+const yrsMo = (m) => !isFinite(m) ? "Never at this payment" : (m >= 12 ? Math.floor(m / 12) + " yr " : "") + (m % 12 ? (m % 12) + " mo" : "");
+const DEBT = {
+  label: "Debt consolidation", tag: "Debt consolidation",
+  title: () => "Rolling debts into your mortgage",
+  intro: () => "Shows what you pay each month today on your mortgage and the debts you'd pay off, what you'd pay after refinancing, and how the money you free up could pay the home off sooner or grow.",
+  note: "Debt consolidation compares principal and interest plus the monthly payments on the debts being paid off. Taxes and insurance stay the same either way and are left out. Closing costs are added to the new loan. Payoff times use the rates and payments shown. Rolling short-term debt into a 30-year loan can cost more interest overall unless the savings go back toward the loan.",
+  blank: (b) => ({ income: 0, value: b.price ? Math.round(b.price * 1.1) : 500000, mBal: 320000, mRate: 7.25, mYears: 27,
+    rate: b.rate || 6.5, term: 30, cc: 6000, investRate: 6, years: 10, mode: "payoff",
+    debts: [{ name: "Credit card", kind: "revolving", bal: 18000, rate: 24.9, pay: 540, payoff: true },
+            { name: "Car loan", kind: "installment", bal: 22000, rate: 8.9, pay: 520, payoff: true },
+            { name: "Personal loan", kind: "installment", bal: 9000, rate: 13.5, pay: 310, payoff: true }] }),
+  mount(sec, d, changed) {
+    const debtRows = () => d.debts.map((x, i) => `<tr>
+        <td><input type="text" data-list="debts" data-row="${i}" data-k="name" value="${esc(x.name)}" aria-label="Debt name"></td>
+        <td><select data-list="debts" data-row="${i}" data-k="kind" aria-label="Type">${[["revolving", "Card / revolving"], ["installment", "Installment"], ["other", "Other"]].map(([v, t]) => `<option value="${v}"${x.kind === v ? " selected" : ""}>${t}</option>`).join("")}</select></td>
+        <td><div class="affix pre"><span>$</span><input type="number" min="0" step="100" data-list="debts" data-row="${i}" data-k="bal" value="${esc(x.bal)}" aria-label="Balance"></div></td>
+        <td><div class="affix"><span>%</span><input type="number" min="0" step="0.25" data-list="debts" data-row="${i}" data-k="rate" value="${esc(x.rate)}" aria-label="Rate"></div></td>
+        <td><div class="affix pre"><span>$</span><input type="number" min="0" step="10" data-list="debts" data-row="${i}" data-k="pay" value="${esc(x.pay)}" aria-label="Monthly payment"></div></td>
+        <td class="c"><input type="checkbox" data-list="debts" data-row="${i}" data-k="payoff"${x.payoff ? " checked" : ""} aria-label="Pay off with the refinance"></td>
+        <td class="staff-only"><button class="icon-btn" type="button" data-act="del" data-i="${i}" aria-label="Remove debt">×</button></td></tr>`).join("");
+    sec.innerHTML = `
+      <div class="calc-head"><h2>Debts</h2></div>
+      <div class="panel calc-in" id="debtIn">
+        <div class="table-wrap"><table class="debts" id="debtList"><thead><tr><th>Debt</th><th>Type</th><th>Balance</th><th>Rate</th><th>Payment / mo</th><th class="c">Pay off</th><th class="staff-only"></th></tr></thead>
+          <tbody>${debtRows()}</tbody></table></div>
+        <div class="actions staff-only"><button class="btn" type="button" data-act="add">+ Add a debt</button></div>
+      </div>
+      <div class="calc-head"><h2>Mortgage and new loan</h2></div>
+      <div class="panel fields calc-in" id="debtLoan">
+        ${numIn("Home value", "value", d, { pre: "$", step: 1000 })}
+        ${numIn("Current mortgage balance", "mBal", d, { pre: "$", step: 1000 })}
+        ${numIn("Current rate", "mRate", d, { suf: "%", step: 0.125 })}
+        ${numIn("Years left on it", "mYears", d, { step: 1 })}
+        ${numIn("New rate", "rate", d, { suf: "%", step: 0.125 })}
+        ${selIn("New term", "term", d, [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"]])}
+        ${numIn("Closing costs (added to loan)", "cc", d, { pre: "$", step: 100 })}
+        ${numIn("Monthly income (optional)", "income", d, { pre: "$", step: 100 })}
+      </div>
+      <div class="results-head"><h2>Before and after</h2></div>
+      <div class="highlights" id="debtHl"></div>
+      <div class="table-wrap"><table id="debtTable"></table></div>
+      <div class="results-head"><h2>Put the savings to work</h2>
+        <div class="seg" id="debtMode" role="group"><button type="button" data-m="payoff">Pay the home off sooner</button><button type="button" data-m="invest">Invest it</button></div></div>
+      <div class="highlights" id="debtWork"></div>
+      <div class="panel fields" id="debtInvest" data-show="mode=invest">
+        ${numIn("Assumed return / yr", "investRate", d, { suf: "%", step: 0.5 })}
+        <div><span class="seg-label">Over</span>${segIn("years", d, [5, 10, 15, 20], "yrs")}</div>
+      </div>`;
+    sec.querySelector("#debtIn").onclick = (e) => {
+      const a = e.target.closest("[data-act]"); if (!a) return;
+      if (a.dataset.act === "add") d.debts.push({ name: "New debt", kind: "revolving", bal: 0, rate: 0, pay: 0, payoff: true });
+      else d.debts.splice(+a.dataset.i, 1);
+      DEBT.mount(sec, d, changed); changed();
+    };
+    sec.querySelector("#debtMode").onclick = (e) => { const b = e.target.closest("[data-m]"); if (!b) return; d.mode = b.dataset.m; sync2(); compute(); changed(); };
+    const sync2 = () => { [...sec.querySelector("#debtMode").children].forEach((b) => b.setAttribute("aria-pressed", b.dataset.m === d.mode)); };
+    const compute = () => {
+      sync2();
+      const paid = d.debts.filter((x) => x.payoff), kept = d.debts.filter((x) => !x.payoff);
+      const sum = (l, f) => l.reduce((a, x) => a + (+f(x) || 0), 0);
+      const debtBal = sum(paid, (x) => x.bal), debtPay = sum(paid, (x) => x.pay);
+      const allBal = sum(d.debts, (x) => x.bal);
+      const blendDebts = allBal ? sum(d.debts, (x) => x.bal * x.rate) / allBal : 0;
+      const blendAll = (allBal + d.mBal) ? (sum(d.debts, (x) => x.bal * x.rate) + d.mBal * d.mRate) / (allBal + d.mBal) : 0;
+      const mPI = pmt(d.mBal, d.mRate, d.mYears), loan = d.mBal + debtBal + (+d.cc || 0), newPI = pmt(loan, d.rate, d.term);
+      const before = mPI + debtPay, save = before - newPI, ltv = d.value ? loan / d.value * 100 : 0;
+      const keptPay = sum(kept, (x) => x.pay);
+      const dtiB = d.income ? (before + keptPay) / d.income * 100 : null, dtiA = d.income ? (newPI + keptPay) / d.income * 100 : null;
+      sec.querySelector("#debtHl").innerHTML =
+        hlBox("Monthly savings", (save >= 0 ? "" : "−") + usd.format(Math.abs(save)), `${usd.format(before)} today vs ${usd.format(newPI)} after`, save >= 0 ? "good" : "") +
+        hlBox("Blended rate today", pct(blendAll, 2), `mortgage and debts together · debts alone ${pct(blendDebts, 2)}`) +
+        hlBox("New loan", usd.format(loan), `${pct(+d.rate)} · ${pct(ltv, 1)} of home value${ltv > 80 ? ' <span class="pill warn">over 80%</span>' : ""}`) +
+        hlBox("Debts paid off", usd.format(debtBal), `${paid.length} of ${d.debts.length} debts`);
+      const row = (l, a, b, cls = "") => `<tr class="${cls}"><td>${l}</td><td>${a}</td><td>${b}</td></tr>`;
+      sec.querySelector("#debtTable").innerHTML = `<thead><tr><th></th><th>Today</th><th>After refinancing</th></tr></thead><tbody>
+        ${row("Mortgage principal &amp; interest", `${usd.format(mPI)} <span class="est">${pct(+d.mRate)}</span>`, `${usd.format(newPI)} <span class="est">${pct(+d.rate)}, ${d.term} yrs</span>`)}
+        ${paid.map((x) => row(esc(x.name), `${usd.format(x.pay)} <span class="est">${pct(+x.rate, 2)}</span>`, "Paid off")).join("")}
+        ${row("Total monthly", usd.format(before), usd.format(newPI), "strong")}
+        ${kept.length ? row("Debts you keep", usd.format(keptPay), usd.format(keptPay)) : ""}
+        ${dtiB !== null ? row("Debt-to-income (before taxes, insurance)", pct(dtiB, 1), pct(dtiA, 1)) : ""}
+        ${row("Balance owed", usd.format(d.mBal + debtBal), usd.format(loan))}</tbody>`;
+      let work;
+      if (d.mode === "invest") {
+        const r = d.investRate / 1200, n = d.years * 12, fv = r ? Math.max(0, save) * (Math.pow(1 + r, n) - 1) / r : Math.max(0, save) * n;
+        work = hlBox(`Invest ${usd.format(Math.max(0, save))}/mo for ${d.years} yrs`, usd.format(fv), `at ${pct(+d.investRate, 1)} a year, compounded monthly`, "good") +
+          hlBox("You put in", usd.format(Math.max(0, save) * n), "") + hlBox("Growth", usd.format(fv - Math.max(0, save) * n), "");
+      } else {
+        const std = payoff(loan, d.rate, newPI), fast = payoff(loan, d.rate, Math.max(newPI, before));
+        work = hlBox("Paid off in", yrsMo(fast.months), `by paying today's ${usd.format(before)} a month instead of ${usd.format(newPI)}`, "good") +
+          hlBox("Time saved", yrsMo(std.months - fast.months), `vs ${d.term} years`) +
+          hlBox("Interest saved", usd.format(std.interest - fast.interest), `on the new loan`);
+      }
+      sec.querySelector("#debtWork").innerHTML = work;
+      sec.querySelector("#debtInvest").hidden = d.mode !== "invest";
+    };
+    wireCalc(sec, d, compute, changed);
+  }
+};
+
+/* ---------- Extra payments (amortization) ---------- */
+const AMORT = {
+  label: "Extra payments", tag: "Extra payments",
+  title: () => "Paying your loan off faster",
+  intro: () => "Shows how an extra amount each month, or a one-time payment, shortens the loan and cuts the interest you pay.",
+  note: "Extra payments are applied to principal in the month paid. Figures cover principal and interest only and assume the rate stays the same for the life of the loan.",
+  blank: (b) => ({ loan: b.price ? Math.round(b.price * (1 - (b.downPct ?? 10) / 100)) : 400000, rate: b.rate || 6.5, term: 30, extra: 200, lump: 0, lumpYear: 5, yearly: 0, schedule: false }),
+  mount(sec, d, changed) {
+    sec.innerHTML = `
+      <div class="calc-head"><h2>Loan and extra payments</h2></div>
+      <div class="panel fields calc-in" id="amIn">
+        ${numIn("Loan amount", "loan", d, { pre: "$", step: 1000 })}
+        ${numIn("Interest rate", "rate", d, { suf: "%", step: 0.125 })}
+        ${selIn("Term", "term", d, [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"], [10, "10 years"]])}
+        ${numIn("Extra each month", "extra", d, { pre: "$", step: 25 })}
+        ${numIn("Extra once a year", "yearly", d, { pre: "$", step: 100 })}
+        ${numIn("One-time payment", "lump", d, { pre: "$", step: 1000 })}
+        ${numIn("…paid in year", "lumpYear", d, { step: 1, min: 1 })}
+      </div>
+      <div class="results-head"><h2>With your extra payments</h2></div>
+      <div class="highlights" id="amHl"></div>
+      <div class="charts one"><div class="chart"><h3>Loan balance</h3><p>Without and with extra payments.</p><div id="amChart"></div>
+        <div class="legend"><span><i style="background:var(--s3)"></i>Regular payments</span><span><i style="background:var(--s2)"></i>With extra payments</span></div></div></div>
+      <div class="results-head"><h2>Year by year</h2></div>
+      <div class="table-wrap"><table id="amTable"></table></div>`;
+    const run = (withExtra) => {
+      const r = d.rate / 1200, n = d.term * 12, p = pmt(d.loan, d.rate, d.term), bal = [d.loan], years = [];
+      let b = d.loan, int = 0, yr = { int: 0, prin: 0, extra: 0 }, months = 0;
+      for (let m = 1; m <= MONTHS; m++) {
+        if (m <= n && b > 0.005) {
+          const i = b * r, reg = Math.min(p - i, b); b -= reg; int += i; yr.int += i; yr.prin += reg; months = m;
+          if (withExtra) {
+            let x = +d.extra || 0; if (m % 12 === 0) x += +d.yearly || 0; if (m === Math.max(1, d.lumpYear) * 12 - 11) x += +d.lump || 0;
+            x = Math.min(x, b); b -= x; yr.extra += x;
+          }
+        }
+        bal.push(b);
+        if (m % 12 === 0) { years.push({ ...yr, bal: b }); yr = { int: 0, prin: 0, extra: 0 }; }
+      }
+      return { p, bal, int, months, years };
+    };
+    const compute = () => {
+      const a = run(false), b = run(true), saved = a.months - b.months;
+      sec.querySelector("#amHl").innerHTML =
+        hlBox("Paid off in", yrsMo(b.months), `instead of ${yrsMo(a.months)}`, "good") +
+        hlBox("Interest saved", usd.format(a.int - b.int), `${usd.format(b.int)} total instead of ${usd.format(a.int)}`, "good") +
+        hlBox("Time saved", saved > 0 ? yrsMo(saved) : "None", "") +
+        hlBox("Regular payment", usd.format(a.p), `principal and interest${+d.extra ? `, plus ${usd.format(+d.extra)} extra` : ""}`);
+      lineChart(sec.querySelector("#amChart"), [{ color: "--s3", values: a.bal }, { color: "--s2", values: b.bal }], Math.min(b.months, MONTHS));
+      const ys = b.years.filter((y, i) => i < d.term && (y.prin + y.extra > 0.5 || i === 0));
+      sec.querySelector("#amTable").innerHTML = `<thead><tr><th>Year</th><th>Principal</th><th>Extra</th><th>Interest</th><th>Balance</th><th>Balance without extra</th></tr></thead><tbody>` +
+        ys.map((y, i) => `<tr><td>${i + 1}</td><td>${usd.format(y.prin)}</td><td>${usd.format(y.extra)}</td><td>${usd.format(y.int)}</td><td>${usd.format(y.bal)}</td><td>${usd.format(a.years[i].bal)}</td></tr>`).join("") + `</tbody>`;
+    };
+    wireCalc(sec, d, compute, changed);
+  }
+};
+
+const CALCS = { cow: COW, rvb: RVB, aff: AFF, debt: DEBT, amort: AMORT };
 // Shown as bubbles. Calculators without a module yet show as "coming soon".
 const BUBBLES = [["compare", "Loan comparison"], ["cow", "Cost of waiting"], ["rvb", "Rent vs buy"], ["aff", "Affordability"],
   ["debt", "Debt consolidation"], ["amort", "Extra payments"], ["arm", "ARM vs fixed"], ["equity", "Equity & appreciation"], ["invest", "Investment property"]];
