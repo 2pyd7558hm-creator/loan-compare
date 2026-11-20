@@ -1786,7 +1786,10 @@ function addCalcKind(kind, value) {
   if (kind === "rvb") return addCalc("rvb", value >= 100 ? { rent: value } : null, true);
   if (kind === "aff") return addCalc("aff", value >= 1000 ? { income: value } : null, true);
   calcsFromNote(CALC_WORD[kind] || "", ctx, true);
-  return file.calcs.find((c) => c.kind === kind) || null;
+  const t = file.calcs.find((c) => c.kind === kind) || null;
+  // Paying cash: the amount mentioned is money in investments (brokerage) the client would sell
+  if (t && kind === "cash" && value >= 1000) t.data.inv = Math.round(value);
+  return t;
 }
 function applyChat(res) {
   const acts = Array.isArray(res.actions) ? res.actions : [];
