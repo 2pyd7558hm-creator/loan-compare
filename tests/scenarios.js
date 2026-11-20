@@ -31,7 +31,7 @@
     C("Lucy Liu 700k CO, 10% down: 30yr 6.875, 20yr 6.5, 15yr 6.125, 10/6 ARM 6.0", { name: "Lucy Liu", price: 700000, opts: [o("conv", 30, 6.875, 10), o("conv", 20, 6.5, 10), o("conv", 15, 6.125, 10), o("conv", 30, 6, 10, { arm: 10 })] }),
     C("Mark Twain 450k CO conv 5% down 6.5 vs 10% down 6.5 vs 20% down 6.375", { name: "Mark Twain", price: 450000, opts: [o("conv", 30, 6.5, 5), o("conv", 30, 6.5, 10), o("conv", 30, 6.375, 20)] }),
     C(["Ellie Ross 500k CO conv 5% down 6.75 vs FHA 3.5% down 6.25", "add a 15 year at 6%", "make B 6.125", "price is 515k"], { name: "Ellie Ross", price: 515000, opts: [o("conv", 30, 6.75, 5), o("fha", 30, 6.125, 3.5), o(null, 15, 6, null)] }),
-    C(["Paul Rudd 600k CO 30 yr 7.0 5% down vs 10% down 6.875", "round up option A to $4,500"], { name: "Paul Rudd", price: 600000, calcs: ["amort"], data: { amort: { opt: "A", roundTo: 4500 } } }),
+    C(["Paul Rudd 600k CO 30 yr 7.0 5% down vs 10% down 6.875", "round up option A to $5,000"], { name: "Paul Rudd", price: 600000, calcs: ["amort"], data: { amort: { opt: "A", roundTo: 5000 } } }),
     C(["Ivy Chen 450k CO conv 5% down 6.5", "add rent vs buy, rent is 2,200"], { name: "Ivy Chen", calcs: ["rvb"], data: { rvb: { rent: 2200 } } }),
     C(["Zoe Park 520k CO conv 5% down 6.75 vs FHA 3.5% down 6.25", "Douglas county", "add a 2-1 buydown on A"], { name: "Zoe Park", county: "Douglas", opts: [o("conv", 30, 6.75, 5, { bd: 2 }), o("fha", 30, 6.25, 3.5)] }),
     C(["Hank Moody 1.1M CO 10% down 30 yr 7.0 vs 15 yr 6.5", "it's in Summit County"], { name: "Hank Moody", price: 1100000, county: "Summit" }),
@@ -41,7 +41,7 @@
     C("Grace Lee, 720 credit score, 430k CO, conv 3% down 6.875 vs FHA 3.5% 6.25", { name: "Grace Lee", price: 430000, titleNot: /score|720/, opts: [o("conv", 30, 6.875, 3, { fthb: true }), o("fha", 30, 6.25, 3.5)] }),
     C("Leo Messi 499,900 CO 5% down 30y 6.625", { name: "Leo Messi", price: 499900, opts: [o("conv", 30, 6.625, 5)] }),
     C("Cost of waiting for Ann Perkins, 400k CO conv 5% down 6.5, rates might drop or prices go up", { name: "Ann Perkins", price: 400000, calcs: ["cow"] }),
-    C("debt consolidation refi for Ron Swanson, home value 600k, owes 300k at 3.5%, credit cards 40k", { name: "Ron Swanson", refi: true, calcs: ["debt"] }),
+    C("debt consolidation refi for Ron Swanson, home value 600k, owes 300k at 3.5%, credit cards 40k", { name: "Ron Swanson", refi: true, calcs: ["debt"], loans: [340000, 340000] }),
     C("Investment property for April Ludgate 550k CO 25% down 7.5 rent 3,200", { name: "April Ludgate", price: 550000, calcs: ["invest"] }),
     C("Andy Dwyer 500k CO 7/6 ARM 6.0 vs 30 fixed 6.75 10% down, show ARM vs fixed", { name: "Andy Dwyer", opts: [o("conv", 30, 6, 10, { arm: 7 }), o("conv", 30, 6.75, 10, { arm: 0 })], calcs: ["arm"] }),
     C("Leslie Knope 475k CO conv 5% down 6.5 vs 20% down 6.25, equity over 10 years, bid 25k over asking", { name: "Leslie Knope", calcs: ["equity"] }),
@@ -77,6 +77,7 @@
     if (e.st) eq("state", s.st, e.st);
     if (e.county) eq("county", s.county, e.county);
     if (e.refi !== undefined) eq("refi", /^refinance/i.test(s.title), e.refi);
+    if (e.loans) e.loans.forEach((v, i) => { const x = s.opts[i]; if (!x || Math.abs(x.loan - v) > 1) f.push(`${LETTERS[i]} loan ${x ? Math.round(x.loan) : "missing"} vs ${v}`); });
     if (e.titleHas && !s.title.includes(e.titleHas)) f.push(`title lacks ${e.titleHas}: ${s.title}`);
     if (e.titleNot && e.titleNot.test(s.title)) f.push(`title has ${e.titleNot}: ${s.title}`);
     // every comparison: names without rates, title made of loan types, taxes/insurance defaults when not typed, payment math, MI rules
