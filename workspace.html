@@ -861,6 +861,7 @@ $("cards").addEventListener("input", (e) => {
   const t = e.target, i = t.dataset.i, k = t.dataset.k;
   if (i === undefined) return;
   const s = state.scenarios[i];
+  if (k === "rate") s.est = false;
   if (k === "name") s[k] = t.value.replace(/\s*\n\s*/g, " ");
   else if (k === "type") {
     s.type = t.value;
@@ -1553,12 +1554,14 @@ function quickDraft(text, ai) {
     opts.forEach((o) => { if (o.bd) o.s.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.bd]} Buydown`; });
     guessed = opts.some((o) => o.guessed);
     draftInfo.guessed = opts.map((o, i) => o.guessed ? i : -1).filter((i) => i >= 0);
+    opts.forEach((o) => { o.s.est = !!o.guessed; });
     state.scenarios = opts.map((o) => o.s); renderCards(); render();
     optText = opts.map((o) => o.s.name).join(" vs ");
   } else {
     applyPreset(preset);
     optText = $("preset").querySelector(`option[value="${preset}"]`).textContent;
     draftInfo.guessed = state.scenarios.map((x, i) => i); draftInfo.sample = true;
+    state.scenarios.forEach((x) => { x.est = true; });
   }
   // State's FHFA home value growth (5-yr average) for the equity chart
   if (st && fhfaRate(st, DEFAULT_SRC) !== null) { state.appreciation = fhfaRate(st, DEFAULT_SRC); $("appreciation").value = state.appreciation; render(); }
@@ -1740,7 +1743,7 @@ function asAskRates(idx, sample) {
       const nums = (t.match(/\d+(?:\.\d+)?/g) || []).map(Number).filter((x) => x >= 1 && x <= 15);
       if (!nums.length || !toCompare()) { asSay("I didn't see a rate there, so I kept the estimates."); return asNext(); }
       const done = [];
-      idx.forEach((i, k) => { const r = nums.length === 1 ? nums[0] : nums[k]; if (r == null) return; const x = state.scenarios[i]; x.rate = r; x.name = x.name.replace(/ at \d+(?:\.\d+)?%/, ` at ${r}%`); done.push(`${LETTERS[i]} ${r}%`); });
+      idx.forEach((i, k) => { const r = nums.length === 1 ? nums[0] : nums[k]; if (r == null) return; const x = state.scenarios[i]; x.rate = r; x.est = false; x.name = x.name.replace(/ at \d+(?:\.\d+)?%/, ` at ${r}%`); done.push(`${LETTERS[i]} ${r}%`); });
       renderCards(); render(); syncActive();
       asSay(`Rates updated: ${done.join(", ")}.`); asNext();
     } });
@@ -1765,6 +1768,100 @@ function asSuggest() {
     else asSay(o.q, [{ label: "Yes, add it", fn: o.fn }, no], { kind: "suggest", answer: (t) => { /^\s*(y|yes|sure|ok|please)\b/i.test(t) ? o.fn() : (asDeclined.add(o.key), asNext()); } });
   }));
   asNext();
+}
+/* ---- Assistant turns read by the AI: it sees the form as it is now and the recent conversation, and sends back changes ---- */
+function clientOpen() { return !!current || !!$("cName").value.trim() || asLog.some((m) => m.who === "a" && /^(Drafted|Added to|Opened)/.test(m.text)); }
+function formForAi() {
+  syncActive();
+  const comp = compareTab(), d = comp ? comp.data : state;
+  return { price: d.price, state: file.st || null, county: file.county || null, refinance: /refi/i.test($("cTitle").value), fee_template: (d.closing && d.closing.template) || null,
+    tabs: file.calcs.map((c) => c.kind), open_tab: activeCalc().kind,
+    options: (d.scenarios || []).map((x, i) => ({ letter: LETTERS[i], name: x.name, type: x.type, term: x.term, arm: x.arm || 0, rate: x.rate, rate_estimated: !!x.est,
+      points: x.points, down_pct: x.downPct, buydown: x.bd || 0, seller_credit: x.credit || 0 })) };
+}
+const CALC_WORD = { amort: "extra", arm: "ARM", cash: "paying cash", cow: "wait", debt: "debts", equity: "equity", invest: "investment" };
+function addCalcKind(kind, value) {
+  if (!CALCS[kind] || file.calcs.some((c) => c.kind === kind)) return null;
+  const ctx = { refi: /refi/i.test($("cTitle").value), rent: null, income: null, extraYearN: null, extraMonth: kind === "amort" && value > 0 ? value : null, specs: null };
+  if (kind === "rvb") return addCalc("rvb", value >= 100 ? { rent: value } : null, true);
+  if (kind === "aff") return addCalc("aff", value >= 1000 ? { income: value } : null, true);
+  calcsFromNote(CALC_WORD[kind] || "", ctx, true);
+  return file.calcs.find((c) => c.kind === kind) || null;
+}
+function applyChat(res) {
+  const acts = Array.isArray(res.actions) ? res.actions : [];
+  if (!acts.length) return;
+  const comp = toCompare(); if (!comp) return;
+  const sc = state.scenarios;
+  for (const a of acts) {
+    if (a.op === "set_price" && a.value >= 10000) setPrice(Math.round(a.value));
+    else if (a.op === "set_location") { if (a.state && US_STATES.includes(a.state.toUpperCase())) file.st = a.state.toUpperCase(); if (a.county) file.county = a.county.replace(/\s+county$/i, "").trim(); }
+    else if (a.op === "set_refi") $("cTitle").value = $("cTitle").value.replace(/^(Refinance|Purchase) options/, a.flag ? "Refinance options" : "Purchase options");
+  }
+  const edit = (x, a) => {
+    if (a.type && a.type !== "keep") x.type = a.type;
+    if (a.term > 0) x.term = a.term;
+    if (a.arm >= 0) x.arm = a.arm;
+    if (a.rate > 0) { x.rate = a.rate; x.est = false; }
+    if (a.points >= 0) x.points = a.points;
+    if (a.down_pct >= 0) x.downPct = a.down_pct;
+    if (a.buydown >= 0) x.bd = a.buydown;
+    if (a.seller_credit >= 0) x.credit = Math.round(a.seller_credit);
+  };
+  // Indexes refer to the options as they were sent: edit first, then remove (highest first), then add
+  acts.filter((a) => a.op === "update_option" && sc[a.index]).forEach((a) => edit(sc[a.index], a));
+  [...new Set(acts.filter((a) => a.op === "remove_option" && sc[a.index]).map((a) => a.index))].sort((x, y) => y - x).forEach((i) => { if (sc.length > 1) sc.splice(i, 1); });
+  for (const a of acts.filter((x) => x.op === "add_option")) {
+    if (sc.length >= 4) break;
+    const base = sc[0] || state.scenarios[0], x = { ...base, name: "", est: true, bd: 0 };
+    x.arm = 0; edit(x, a);
+    if (!(a.rate > 0)) x.rate = +(base.rate - (x.type === "fha" ? 0.25 : x.type === "va" ? 0.375 : 0) + (base.type === "fha" ? 0.25 : base.type === "va" ? 0.375 : 0)
+      - (x.term <= 15 && base.term > 15 ? 0.5 : 0) - 0.25 * ((x.points || 0) - (base.points || 0)) - (x.arm && !base.arm ? 0.5 : 0)).toFixed(3);
+    sc.push(x);
+  }
+  // Program rules: FHA at least 3.5% down, mortgage insurance by program, and conventional loans over the county limit are jumbo
+  sc.forEach((x) => {
+    if (x.type === "fha" && x.downPct < 3.5) x.downPct = 3.5;
+    if (x.type === "conv") { const lc = loanClass(state.price * (1 - x.downPct / 100), file.st, file.county); if (lc.kind === "jumbo") x.type = "jumbo"; }
+    x.mi = x.type === "conv" ? convPmi(x.downPct, x.term) : x.type === "fha" ? (x.mi || 0.55) : 0;
+  });
+  nameOptions(sc.map((x) => ({ s: x, typed: { points: sc.some((y) => y.points > 0), down: true } })));
+  sc.forEach((x) => { if (x.bd) x.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[x.bd]} Buydown`; });
+  renderCards(); render(); syncActive();
+  let added = null;
+  for (const a of acts.filter((x) => x.op === "add_calc" && x.calc && x.calc !== "none")) added = addCalcKind(a.calc, a.value) || added;
+  drawTabs(); asRender();
+}
+async function asChat(v) {
+  const known = { name: $("cName").value.trim() || null, addr: null };
+  const strip = (t) => stripNote(String(t || ""), known).note;
+  const history = asLog.slice(0, -1).slice(-12).map((m) => ({ who: m.who, text: strip(m.text) }));
+  $("quickBtn").disabled = true; asSay("Thinking…");
+  let res = null;
+  try {
+    const r = await sb.functions.invoke("draft-reader", { body: { mode: "chat", note: strip(v), form: formForAi(), history } });
+    if (!r.error && r.data && r.data.kind === "chat") res = r.data;
+  } catch (e) { res = null; }
+  $("quickBtn").disabled = false;
+  if (asLog.length && asLog[asLog.length - 1].text === "Thinking…") asLog.pop();
+  if (!res) {
+    // The AI reader didn't answer: fall back to the typed rules
+    if (asPending) { const h = asPending; asPending = null; h.answer(v); return; }
+    if (isFollowUp(v)) { asAfterDraft(followUp(v)); return; }
+    asSay("I couldn't reach the AI reader just now. Try again in a moment, or turn off AI reader to use the typed rules.");
+    return;
+  }
+  asPending = null; asQueue = [];
+  applyChat(res);
+  if (res.reply) asSay(res.reply);
+  const k = res.suggest_calc;
+  if (k && k !== "none" && CALCS[k] && !file.calcs.some((c) => c.kind === k) && !asDeclined.has(k)) {
+    asDeclined.add(k);
+    asSay(res.suggest_text || `Want to add ${KIND_LABEL[k]}?`, [
+      { label: "Yes, add it", fn: () => { const t = addCalcKind(k); drawTabs(); asSay(t ? `Added ${KIND_LABEL[k]} as a tab below. Save when it looks right.` : "That one's already there."); } },
+      { label: "No thanks", fn: () => asSay("OK.") },
+    ]);
+  }
 }
 /* ---- AI reader: Claude reads the note (without names or street addresses) through our Supabase function ---- */
 // Take the client's name, street address and anything like an email, phone or SSN out of the note before it leaves the browser
@@ -1835,8 +1932,13 @@ $("aiOn").addEventListener("change", (e) => { try { localStorage.setItem("aiRead
 $("quickForm").addEventListener("submit", (e) => {
   e.preventDefault(); const v = $("quickIn").value.trim(); if (!v) return;
   $("quickIn").value = "";
-  // Shown in the conversation without the street address; the name is kept, since this stays in the browser
+  // Shown in the conversation; names stay in the browser
   asUser(v);
+  if ($("aiOn").checked && clientOpen()) {
+    const b = noteBasics(v), cur = $("cName").value.trim().toLowerCase();
+    const otherClient = b.name && b.name.toLowerCase() !== cur && (b.price || optionSpecs(v).length >= 1);
+    if (!otherClient) { asChat(v); return; }
+  }
   // An answer to the assistant's question, unless it's clearly a new note (another client, or a price with loan options)
   if (asPending) {
     const b = noteBasics(v), cur = $("cName").value.trim().toLowerCase();
@@ -1854,7 +1956,6 @@ $("quickForm").addEventListener("submit", (e) => {
 });
 $("quickIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("quickForm").requestSubmit(); } });
 asRender();
-$("cName").addEventListener("input", () => asRender());
 $("cName").addEventListener("input", () => asRender());
 
 async function loadList() {
