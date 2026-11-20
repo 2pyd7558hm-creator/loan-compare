@@ -259,7 +259,7 @@ function affSolveAt(d, rateOverride, miPct, upfront) {
   const dti = d.dti / 100, tax = d.taxRate / 100, ins = +d.ins || 0, hoa = +d.hoa || 0, miRate = miPct / 100, down = +d.down || 0, debts = +d.debts || 0;
   const f = rate > 0 ? rate / (1 - Math.pow(1 + rate, -n)) : 1 / n;
   const budget = d.income / 12 * dti - debts - ins - hoa;
-  const priceFor = (withMi) => { const k = (f + (withMi ? miRate / 12 : 0)) * (1 + prog.upfront); return (budget + down * k) / (k + tax / 12); };
+  const priceFor = (withMi) => { const k = f * (1 + prog.upfront) + (withMi ? miRate / 12 : 0); return (budget + down * k) / (k + tax / 12); };
   let price, hasMi = false;
   if (prog.miUntilLtv < 0) price = priceFor(false);
   else if (prog.miUntilLtv === 0) { price = priceFor(true); hasMi = true; }
@@ -267,7 +267,7 @@ function affSolveAt(d, rateOverride, miPct, upfront) {
   if (prog.minDown > 0 && down < price * prog.minDown) price = down / prog.minDown;
   price = Math.max(0, price);
   const loan = Math.max(0, price - down) * (1 + prog.upfront);
-  const pi = loan * f, tx = price * tax / 12, mi = hasMi ? loan * miRate / 12 : 0, total = pi + tx + ins + mi + hoa;
+  const pi = loan * f, tx = price * tax / 12, mi = hasMi ? Math.max(0, price - down) * miRate / 12 : 0, total = pi + tx + ins + mi + hoa;
   return { price, loan, pi, tx, ins, mi, hoa, total, down, miRate: miPct, upfront, dtiOut: d.income > 0 ? (total + debts) / (d.income / 12) : 0, cc: price * d.cc / 100, pp: price * d.pp / 100 };
 }
 const AFF = {

@@ -207,7 +207,7 @@ tbody tr:last-child td { border-bottom: 0 }
   <footer class="disclosure">
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
     <p><strong>For illustration only.</strong> This is not a loan offer, a commitment to lend, or a Loan Estimate. Figures are estimates based on the inputs shown. Actual rates, APRs, fees and payments depend on credit, property, loan amount, occupancy and market conditions, and are subject to underwriting approval. Rates can change daily.</p>
-    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%; VA funding fee for first use, 2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) as finance charges. Conventional PMI is an estimate and is shown until the balance reaches 78% of the purchase price. FHA annual MIP follows HUD's current table (Mortgagee Letter 2023-05) and is shown for 11 years with 10% or more down, otherwise for the life of the loan. Cash to close shows down payment, points and lender fees only and excludes third-party costs, prepaids and escrow deposits. Taxes and insurance are estimates.</p>
+    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%; VA funding fee for first use, 2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) as finance charges. Conventional PMI is an estimate and is shown until the balance reaches 78% of the purchase price. FHA annual MIP follows HUD's current table (Mortgagee Letter 2023-05), is figured on each year's average scheduled balance as HUD does, and is shown for 11 years with 10% or more down, otherwise for the life of the loan. Cash to close shows down payment, points and lender fees only and excludes third-party costs, prepaids and escrow deposits. Taxes and insurance are estimates.</p>
 <p class="ehl"><svg viewBox="0 0 64 64" width="34" height="34" role="img" aria-label="Equal Housing Lender"><path d="M32 4 2 26h8v32h44V26h8L32 4z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="19" y="30" width="26" height="6" fill="currentColor"/><rect x="19" y="42" width="26" height="6" fill="currentColor"/></svg><span>EQUAL HOUSING<br>LENDER</span></p>
     <p id="brandFoot"></p>
     <p class="links"><a href="https://www.nmlsconsumeraccess.org/" target="_blank" rel="noopener">NMLS Consumer Access</a> · <a href="https://bit.ly/TexasRecoveryFundNotice" target="_blank" rel="noopener">Texas Recovery Fund Notice</a> · <a href="https://www.thatmortgagecouple.com/legal" target="_blank" rel="noopener">Legal</a> · <a href="https://www.thatmortgagecouple.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></p>
@@ -267,6 +267,10 @@ function analyze(s) {
   const pointsCost = loan * s.points / 100;
   const upfront = pointsCost + s.fees + financed;
   const miMonths = fha ? Math.min(n, fha.years * 12) : n;
+  // FHA monthly MIP the way HUD figures it: average scheduled balance for each loan year x annual rate,
+  // divided by (1 + upfront MIP factor) since the upfront MIP is financed, then divided by 12
+  const fhaYr = [];
+  if (fha) { let bb = loan; for (let y = 0; y * 12 < miMonths; y++) { let sum = 0; for (let k = 0; k < 12; k++) { bb = Math.max(0, bb + bb * r - pi); sum += bb; } fhaYr.push(sum / 12 * fha.rate / 100 / 1.0175 / 12); } }
 
   const bal = [loan], cost = [upfront], equity = [value - loan], pay = [];
   let b = loan, cumInt = 0, cumMI = 0, firstMI = null;
@@ -275,7 +279,7 @@ function analyze(s) {
     if (m <= n && b > 0.005) {
       interest = b * r;
       if (s.type === "conv" && s.downPct < 20 && b / value > 0.78) mi = base * s.mi / 1200;
-      if (fha && m <= miMonths) mi = b * fha.rate / 1200;
+      if (fha && m <= miMonths) mi = fhaYr[Math.floor((m - 1) / 12)] || 0;
       p = Math.min(pi - interest, b);
       b -= p;
     }
