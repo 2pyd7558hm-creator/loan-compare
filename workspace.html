@@ -231,6 +231,37 @@ body.presenting #table td, body.presenting #table th { cursor: cell }
 .quick input { flex: 1 1 320px }
 body.readonly .staff-only, body.readonly .fee-x { display: none }
 body.readonly table.fees input, body.readonly table.fees select { pointer-events: none; background: var(--soft); border-color: transparent }
+/* ===== Calculator hub ===== */
+.hub { display: grid; gap: 10px }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center }
+.tabs .tab { font: inherit; font-size: 14px; font-weight: 500; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 7px 14px; border-radius: 99px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center }
+.tabs .tab[aria-current=true] { background: var(--brand); border-color: var(--brand); color: var(--brand-ink) }
+.tabs .tab .eye { font-size: 11px; font-weight: 600; opacity: .75 }
+.tabs .tab.hidden-tab { border-style: dashed; color: var(--muted) }
+.bubbles { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--muted) }
+.bubbles button { font: inherit; font-size: 13px; border: 1px dashed var(--brand-deep); background: transparent; color: var(--brand-deep); padding: 5px 12px; border-radius: 99px; cursor: pointer }
+.bubbles button:hover { background: var(--soft) }
+.bubbles button[disabled] { border-color: var(--line); color: var(--muted); cursor: default; opacity: .7 }
+.tab-tools { display: flex; gap: 8px 14px; flex-wrap: wrap; align-items: center; font-size: 13px }
+.tab-tools input[type=text] { width: 220px; padding: 5px 8px; font-size: 13px }
+.calc-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px }
+.calc-head h2 { margin: 0 }
+.calc-pane .results-head { margin-top: 18px }
+.calc-pane .est, .hl .est { font-size: 11px; color: var(--muted); font-weight: 500 }
+.hl.good .v { color: var(--good) }
+.hl .vs { font-size: 14px; color: var(--muted); font-weight: 500 }
+.pill.warn { background: #fdf0d9; color: #8a5a00 }
+.charts.one { grid-template-columns: minmax(0, 760px) }
+.rows { display: grid; font-size: 14px }
+.rows .row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line) }
+.rows .row:first-child { border-top: 0 }
+.rows .row.total { font-weight: 600 }
+.cobrand-row { margin-top: 12px; font-size: 14px }
+body:not([data-kind="compare"]) .calc-compare { display: none !important }
+body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
+.ehl { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--fg) }
+.ehl svg { flex: none }
+.ehl span { font-size: 10px; font-weight: 700; letter-spacing: .08em; line-height: 1.2 }
 @media (prefers-reduced-motion: reduce) { .lo-pointer { transition: none } .live-pill::before { animation: none } }
 </style>
 <meta name="robots" content="noindex">
@@ -251,7 +282,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     <!-- Sign-in (staff) -->
     <div id="vLogin" class="panel login" hidden>
       <h2>Loan officer sign-in</h2>
-      <p id="loginHint">Sign in to build, save and share loan comparisons for your clients.</p>
+      <p id="loginHint">Sign in to build, save and share loan comparisons and calculators for your clients.</p>
       <form id="loginForm" class="login" style="gap:10px">
         <label class="f">Email<input id="loginEmail" type="email" autocomplete="username" required></label>
         <label class="f" id="pwWrap">Password<input id="loginPw" type="password" autocomplete="current-password" required></label>
@@ -276,13 +307,13 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
       <div style="display:grid;gap:4px;justify-items:end"><span class="live-pill" id="livePill" hidden>Your loan officer is presenting</span><label class="follow" id="followWrap" hidden><input type="checkbox" id="followOn" checked> Follow along</label><div style="font-size:13px;color:var(--muted)" id="cvDate"></div></div>
     </div>
     <div id="vClientMissing" class="panel login" hidden>
-      <h2>This comparison isn't available</h2>
+      <h2>This page isn't available</h2>
       <p>The link may be mistyped, or sharing has been turned off. Please contact your loan officer at (303) 931-6776.</p>
     </div>
     <!-- Staff workspace -->
     <div id="vStaff" hidden>
       <div class="ws-top" style="margin-bottom:12px">
-        <h2>Client comparisons</h2>
+        <h2>Clients</h2>
         <div><span class="who" id="whoAmI"></span> <button class="btn link" id="signOutBtn" type="button">Sign out</button></div>
       </div>
       <div class="ws-grid">
@@ -295,7 +326,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
         </div>
         <div class="panel">
           <form class="quick" id="quickForm">
-            <input id="quickIn" type="text" autocomplete="off" aria-label="Quick draft" placeholder="Quick draft: Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA">
+            <input id="quickIn" type="text" autocomplete="off" aria-label="Quick draft" placeholder="Quick draft: Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA, rent 2400, wait">
             <button class="btn" type="submit">Draft it</button>
           </form>
           <div class="client-fields">
@@ -305,17 +336,17 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
             <label class="f wide">Private notes (client never sees these)<textarea id="cNotes"></textarea></label>
           </div>
           <div class="actions">
-            <button class="btn primary" id="saveBtn" type="button">Save comparison</button>
+            <button class="btn primary" id="saveBtn" type="button">Save</button>
             <button class="btn danger" id="delBtn" type="button" hidden>Delete</button>
             <span class="status" id="saveStatus"></span>
           </div>
           <div id="delConfirm" class="actions" hidden>
-            <span style="font-size:14px">Delete this comparison for good? The client link stops working.</span>
+            <span style="font-size:14px">Delete this client and all their tabs for good? The client link stops working.</span>
             <button class="btn danger" id="delYes" type="button">Yes, delete</button>
             <button class="btn" id="delNo" type="button">Keep it</button>
           </div>
           <div class="share" id="shareBox" hidden>
-            <label class="toggle"><input id="shareOn" type="checkbox"> Client can open this comparison with a private link</label>
+            <label class="toggle"><input id="shareOn" type="checkbox"> Client can open their tabs with a private link</label>
             <div class="share-row" id="shareRow" hidden>
               <input id="shareUrl" readonly aria-label="Client link">
               <button class="btn" id="copyBtn" type="button">Copy link</button>
@@ -331,13 +362,24 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
       </div>
     </div>
   </section>
+  <section id="hubSec" class="hub" hidden>
+    <div class="tabs" id="calcTabs" role="tablist" aria-label="Calculators"></div>
+    <div class="tab-tools staff-only" id="tabTools">
+      <label class="toggle"><input type="checkbox" id="tabShared"> Borrower sees this tab</label>
+      <input type="text" id="tabTitle" aria-label="Tab name" placeholder="Tab name">
+      <button class="btn link" id="tabLink" type="button">Copy link to this tab</button>
+      <button class="btn link" id="tabRemove" type="button">Remove tab</button>
+      <span class="status" id="tabStatus"></span>
+    </div>
+    <div class="bubbles staff-only" id="bubbles"></div>
+  </section>
   <div class="intro">
     <span class="sample">Sample scenarios · not a rate quote</span>
     <h1>Compare your loan options side by side</h1>
     <p>Enter up to four loan options. See the monthly payment, cash needed at closing, and what each option really costs over the time you expect to keep it.</p>
   </div>
 
-  <section id="homeSec">
+  <section id="homeSec" class="calc-compare">
     <h2>The home</h2>
     <div class="panel fields">
       <label class="f">Purchase price<div class="affix pre"><span>$</span><input id="price" type="number" min="0" step="1000"></div></label>
@@ -348,7 +390,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     </div>
   </section>
 
-  <section id="closingSec">
+  <section id="closingSec" class="calc-compare">
     <div class="opts-head">
       <h2>Closing costs</h2>
       <div class="preset staff-only">
@@ -388,7 +430,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     </div>
   </section>
 
-  <section id="optionsSec">
+  <section id="optionsSec" class="calc-compare">
     <div class="opts-head">
       <h2>Loan options</h2>
       <label class="preset">Quick start
@@ -407,7 +449,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     <div class="cards" id="cards"></div>
   </section>
 
-  <section id="resultsSec">
+  <section id="resultsSec" class="calc-compare">
     <div class="results-head">
       <h2>How they compare</h2>
       <div><span class="seg-label">Keep the loan for</span><div class="seg" id="horizon" role="group" aria-label="Years you expect to keep the loan"></div></div>
@@ -423,10 +465,16 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     </div>
   </section>
 
+  <section id="cowSec" class="calc-pane" hidden></section>
+  <section id="rvbSec" class="calc-pane" hidden></section>
+  <section id="affSec" class="calc-pane" hidden></section>
+
   <footer class="disclosure">
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
     <p><strong>For illustration only.</strong> This is not a loan offer, a commitment to lend, or a Loan Estimate. Figures are estimates based on the inputs shown. Actual rates, APRs, fees and payments depend on credit, property, loan amount, occupancy and market conditions, and are subject to underwriting approval. Rates can change daily.</p>
-    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%, VA funding fee 2.15% first use) as finance charges. Conventional PMI is shown until the balance reaches 78% of the purchase price. FHA annual MIP is shown for the life of the loan with less than 10% down, or 11 years otherwise. Cash to close shows down payment, points and lender fees, plus third-party fees, prepaids and escrow deposits when closing costs are itemized. Fees paid by the seller or lender are not included. Prepaids and escrow deposits are estimates. Taxes and insurance are estimates.</p>
+    <p id="calcNote" hidden></p>
+    <p class="calc-compare">APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%, VA funding fee 2.15% first use) as finance charges. Conventional PMI is shown until the balance reaches 78% of the purchase price. FHA annual MIP is shown for the life of the loan with less than 10% down, or 11 years otherwise. Cash to close shows down payment, points and lender fees, plus third-party fees, prepaids and escrow deposits when closing costs are itemized. Fees paid by the seller or lender are not included. Prepaids and escrow deposits are estimates. Taxes and insurance are estimates.</p>
+    <p class="ehl"><svg viewBox="0 0 64 64" width="34" height="34" role="img" aria-label="Equal Housing Lender"><path d="M32 4 2 26h8v32h44V26h8L32 4z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="19" y="30" width="26" height="6" fill="currentColor"/><rect x="19" y="42" width="26" height="6" fill="currentColor"/></svg><span>EQUAL HOUSING<br>LENDER</span></p>
     <p id="brandFoot"></p>
     <p class="links"><a href="https://www.nmlsconsumeraccess.org/" target="_blank" rel="noopener">NMLS Consumer Access</a> · <a href="https://bit.ly/TexasRecoveryFundNotice" target="_blank" rel="noopener">Texas Recovery Fund Notice</a> · <a href="https://www.thatmortgagecouple.com/legal" target="_blank" rel="noopener">Legal</a> · <a href="https://www.thatmortgagecouple.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></p>
   </footer>
@@ -708,7 +756,7 @@ function render() {
 }
 
 /* Brand */
-$("brandFoot").textContent = `${BRAND.name}, powered by ${BRAND.company} · ${BRAND.nmls} · ${BRAND.address} · Equal Housing Opportunity.`;
+$("brandFoot").textContent = `${BRAND.name}, powered by ${BRAND.company} · ${BRAND.nmls} · ${BRAND.address} · Equal Housing Lender.`;
 
 
 const DEFAULT_FEE_TEMPLATES = [
@@ -816,6 +864,7 @@ renderCards();
 render();
 </script>
 
+<script src="calcs.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 /* ===== Workspace: connects the calculator to Supabase ===== */
@@ -826,17 +875,131 @@ const clientToken = new URLSearchParams(location.search).get("c");
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const TOP_KEYS = ["price", "taxes", "insurance", "hoa", "appreciation"];
-function getState() { return JSON.parse(JSON.stringify({ ...state })); }
-function setState(obj) {
+const tabParam = new URLSearchParams(location.search).get("t"); // a link straight to one tab: ?c=<token>&t=<tab id>
+
+/* ---- Borrower file: several calculators ("tabs"), each with its own inputs. Older saves held one loan comparison. ---- */
+const BLANK_COMPARE = JSON.parse(JSON.stringify({ ...state }));
+const KIND_LABEL = Object.fromEntries(BUBBLES);
+const uid = () => Math.random().toString(36).slice(2, 8);
+const escH = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+let file = null;
+function wrapFile(d) {
+  if (d && d.v === 2 && Array.isArray(d.calcs) && d.calcs.length) return d;
+  const id = uid();
+  return { v: 2, active: id, calcs: [{ id, kind: "compare", title: "Loan comparison", shared: true, data: d && d.scenarios ? d : JSON.parse(JSON.stringify(BLANK_COMPARE)) }] };
+}
+const activeCalc = () => file.calcs.find((c) => c.id === file.active) || file.calcs[0];
+const isShared = (c) => c.shared !== false;
+function syncActive() { const c = file && activeCalc(); if (c && c.kind === "compare") c.data = JSON.parse(JSON.stringify({ ...state })); }
+function getState() { syncActive(); return JSON.parse(JSON.stringify(file)); }
+// What the borrower may see: only the tabs marked "Borrower sees this tab"
+function shareView(f) { return { ...f, calcs: f.calcs.filter(isShared) }; }
+function setCompare(obj) {
   Object.assign(state, obj);
   state.closing = obj.closing ? JSON.parse(JSON.stringify(obj.closing)) : { template: "", items: [] };
   TOP_KEYS.forEach((k) => { $(k).value = state[k]; });
   renderCards(); render();
 }
+// keepActive: on the borrower's side, stay on the tab they picked (when not following, or when the loan officer is on a hidden tab)
+function setState(obj, keepActive) {
+  const prev = file && file.active;
+  file = wrapFile(JSON.parse(JSON.stringify(obj)));
+  if (document.body.classList.contains("readonly")) {
+    file = shareView(file);
+    const has = (id) => file.calcs.some((c) => c.id === id);
+    if (prev && has(prev) && (keepActive || !has(file.active))) file.active = prev;
+    if (!has(file.active) && file.calcs.length) file.active = file.calcs[0].id;
+  }
+  if (!file.calcs.length) return;
+  showCalc();
+}
+const INTRO0 = { sample: document.querySelector(".intro .sample").textContent, h1: document.querySelector(".intro h1").textContent, p: document.querySelector(".intro p").textContent };
+function drawIntro() {
+  const c = activeCalc(), ro = document.body.classList.contains("readonly"), m = CALCS[c.kind];
+  const q = (sel) => document.querySelector(".intro " + sel);
+  if (c.kind === "compare") {
+    q(".sample").textContent = ro ? "Your loan comparison" : INTRO0.sample; q("h1").textContent = INTRO0.h1;
+    q("p").textContent = ro ? "Your loan officer prepared these options for you. Use the buttons to see how each option compares over the years you expect to keep the loan." : INTRO0.p;
+  } else {
+    q(".sample").textContent = (ro ? "Prepared for you" : "Estimates") + " · not a rate quote"; q("h1").textContent = m.title(c.data); q("p").textContent = m.intro(c.data);
+  }
+  $("calcNote").hidden = c.kind === "compare"; $("calcNote").textContent = m ? m.note : "";
+}
+function showCalc() {
+  const c = activeCalc();
+  document.body.dataset.kind = c.kind;
+  Object.keys(CALCS).forEach((k) => { $(k + "Sec").hidden = c.kind !== k; });
+  if (c.kind === "compare") setCompare(c.data);
+  else CALCS[c.kind].mount($(c.kind + "Sec"), c.data, calcChanged);
+  drawIntro(); drawTabs(); queueState();
+}
+function calcChanged() { drawIntro(); queueState(); }
+let stateTimer2 = null;
+function queueState() { if (presenting) { clearTimeout(stateTimer2); stateTimer2 = setTimeout(() => sendPresent("state", getState()), 150); } }
+
+function drawTabs() {
+  const ro = document.body.classList.contains("readonly"), c = activeCalc();
+  const vis = ro ? file.calcs.filter(isShared) : file.calcs;
+  $("calcTabs").innerHTML = vis.map((t) => `<button type="button" role="tab" class="tab${isShared(t) ? "" : " hidden-tab"}" data-t="${t.id}" aria-current="${t.id === file.active}">${escH(t.title)}${!ro && !isShared(t) ? '<span class="eye">hidden</span>' : ""}</button>`).join("");
+  $("hubSec").hidden = ro && vis.length < 2;
+  if (ro) return;
+  $("tabShared").checked = isShared(c); $("tabTitle").value = c.title; $("tabRemove").hidden = file.calcs.length < 2;
+}
+function activate(id) { if (id === file.active) return; syncActive(); file.active = id; showCalc(); window.scrollTo({ top: Math.min(scrollY, $("hubSec").offsetTop - 10), behavior: "smooth" }); }
+// Numbers the calculators share, so a new tab starts from what's already in the file
+function basicsOf() {
+  syncActive();
+  const b = { st: file.st, rent: file.rent };
+  for (const c of file.calcs) {
+    const d = c.data;
+    if (c.kind === "compare") { b.price ??= d.price; b.taxes ??= d.taxes; b.insurance ??= d.insurance; b.hoa ??= d.hoa; b.rate ??= d.scenarios[0] && d.scenarios[0].rate; b.downPct ??= d.scenarios[0] && d.scenarios[0].downPct; }
+    else if (c.kind === "cow" || c.kind === "rvb") { b.price ??= d.price; b.taxes ??= d.taxes; b.insurance ??= d.insurance; b.rate ??= d.rate; b.downPct ??= d.downPct; b.st ??= d.st; if (c.kind === "rvb") b.rent ??= d.rent; }
+  }
+  return b;
+}
+function addCalc(kind, extra, silent) {
+  syncActive();
+  const b = basicsOf(), n = file.calcs.filter((c) => c.kind === kind).length;
+  let data;
+  if (kind === "compare") { data = JSON.parse(JSON.stringify(BLANK_COMPARE)); if (b.price) data.price = b.price; if (b.taxes) data.taxes = b.taxes; if (b.insurance) data.insurance = b.insurance; }
+  else data = CALCS[kind].blank(b);
+  Object.assign(data, extra || {});
+  const t = { id: uid(), kind, title: KIND_LABEL[kind] + (n ? " " + (n + 1) : ""), shared: true, data };
+  file.calcs.push(t);
+  if (!silent) { file.active = t.id; showCalc(); say("tabStatus", "Added. Save to keep it."); }
+  return t;
+}
+function drawBubbles() {
+  $("bubbles").innerHTML = `<span>Add a calculator:</span>` + BUBBLES.map(([k, l]) => {
+    const ok = k === "compare" || CALCS[k];
+    return `<button type="button" data-add="${k}"${ok ? "" : ' disabled title="Coming soon"'}>+ ${l}${ok ? "" : " (soon)"}</button>`;
+  }).join("");
+}
+drawBubbles();
+$("bubbles").addEventListener("click", (e) => { const b = e.target.closest("[data-add]"); if (b && !b.disabled) addCalc(b.dataset.add); });
+$("calcTabs").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (b) activate(b.dataset.t); });
+$("tabShared").addEventListener("change", (e) => { activeCalc().shared = e.target.checked; drawTabs(); queueState(); say("tabStatus", (e.target.checked ? "The borrower will see this tab" : "Hidden from the borrower") + " once you save."); });
+$("tabTitle").addEventListener("input", (e) => { activeCalc().title = e.target.value || KIND_LABEL[activeCalc().kind]; drawTabs(); queueState(); });
+$("tabRemove").addEventListener("click", () => {
+  const b = $("tabRemove");
+  if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Click again to remove"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Remove tab"; }, 4000); return; }
+  b.dataset.sure = ""; b.textContent = "Remove tab";
+  const i = file.calcs.indexOf(activeCalc()); file.calcs.splice(i, 1);
+  file.active = file.calcs[Math.max(0, i - 1)].id; showCalc(); say("tabStatus", "Removed. Save to keep the change.");
+});
+$("tabLink").addEventListener("click", async () => {
+  const c = activeCalc();
+  if (!current) { say("tabStatus", "Save first, then turn on the client link.", true); return; }
+  if (!current.shared) { say("tabStatus", "Turn on the client link (below the client details) first.", true); return; }
+  if (!isShared(c)) { say("tabStatus", "This tab is hidden from the borrower. Tick “Borrower sees this tab” and save first.", true); return; }
+  const url = $("shareUrl").value + "&t=" + c.id;
+  try { await navigator.clipboard.writeText(url); say("tabStatus", "Link to this tab copied."); } catch { say("tabStatus", url); }
+});
+
 const show = (id) => ["vLogin", "vSetPw", "vClient", "vClientMissing", "vStaff"].forEach((v) => $(v).hidden = v !== id);
 const lock = (on) => document.body.classList.toggle("locked", on);
 const say = (id, msg, err) => { $(id).textContent = msg || ""; $(id).classList.toggle("err", !!err); };
-const BLANK = getState();
+const BLANK = JSON.parse(JSON.stringify(BLANK_COMPARE));
 
 /* ---- Client view (private link) ---- */
 async function clientView() {
@@ -844,12 +1007,13 @@ async function clientView() {
   const { data, error } = await sb.rpc("get_shared_comparison", { token: clientToken });
   if (error || !data || !data.length) { lock(true); show("vClientMissing"); return; }
   const c = data[0];
-  setState(c.data);
+  const f0 = wrapFile(c.data);
+  if (tabParam && f0.calcs.some((t) => t.id === tabParam && isShared(t))) f0.active = tabParam;
+  setState(f0);
+  if (!file.calcs.length) { lock(true); show("vClientMissing"); return; }
   $("cvName").textContent = c.client_name;
   $("cvTitle").textContent = c.title ? "· " + c.title : "";
   $("cvDate").textContent = "Updated " + new Date(c.updated_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  document.querySelector(".intro p").textContent = "Your loan officer prepared these options for you. Use the buttons to see how each option compares over the years you expect to keep the loan.";
-  document.querySelector(".intro .sample").textContent = "Your loan comparison";
   lock(false); show("vClient");
   followPresenter();
 }
@@ -863,7 +1027,7 @@ async function staffView(session) {
   if (!ok) { lock(true); show("vLogin"); say("loginStatus", "This login isn't set up as staff yet. Ask the account owner to add you.", true); return; }
   $("whoAmI").textContent = session.user.email;
   presenterName = await staffFirstName(session.user);
-  lock(false); show("vStaff");
+  lock(false); show("vStaff"); $("hubSec").hidden = false;
   await loadList();
   newComparison();
   loadFeeTemplates();
@@ -972,7 +1136,12 @@ function quickDraft(text) {
   const parts = text.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
   const low = text.toLowerCase();
   let price = null, st = null, name = null, addr = null;
-  const m = text.match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d+)?\s*(k|m)?\b|\$\s*(\d+(?:\.\d+)?)\s*(k|m)\b|\b(\d+(?:\.\d+)?)\s*(k|m)\b/i);
+  // Extras for the other calculators: "rent 2400", "income 95k", "wait" / "cost of waiting", "afford"
+  const RENT_RE = /\brent(?:ing|s)?\s*(?:is|of|at|:)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?/i, INC_RE = /\b(?:income|makes?|salary)\s*(?:is|of|:)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?/i;
+  const numK = (mm) => mm ? parseFloat(mm[1].replace(/,/g, "")) * (mm[2] ? 1000 : 1) : null;
+  const rent = numK(text.match(RENT_RE)), income = numK(text.match(INC_RE));
+  const textP = text.replace(RENT_RE, " ").replace(INC_RE, " ");
+  const m = textP.match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d+)?\s*(k|m)?\b|\$\s*(\d+(?:\.\d+)?)\s*(k|m)\b|\b(\d+(?:\.\d+)?)\s*(k|m)\b/i);
   if (m) {
     const num = parseFloat((m[1] || m[3] || m[5]).replace(/,/g, "")), unit = (m[2] || m[4] || m[6] || "").toLowerCase();
     price = unit === "k" ? num * 1e3 : unit === "m" ? num * 1e6 : num;
@@ -984,14 +1153,14 @@ function quickDraft(text) {
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
     if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
     const q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
-    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
+    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
   }
   if (!st) { const sm = (text.match(/\b[A-Z]{2}\b/g) || []).find((x) => US_STATES.includes(x) && x !== "VA"); if (sm) st = sm; }
   if (!name) {
     const words = text.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "").split(/\s+/), keep = [];
     for (const w of words) {
       const bare = w.replace(/[,;:.]+$/, "");
-      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
+      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
       keep.push(bare); if (/[,;]$/.test(w)) break;
     }
     while (keep.length && /^(and|&)$/i.test(keep[keep.length - 1])) keep.pop();
@@ -1027,21 +1196,29 @@ function quickDraft(text) {
     applyPreset(preset);
     optText = $("preset").querySelector(`option[value="${preset}"]`).textContent;
   }
-  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText];
+  // State's FHFA home value growth (5-yr average) for the equity chart
+  if (st && fhfaRate(st, DEFAULT_SRC) !== null) { state.appreciation = fhfaRate(st, DEFAULT_SRC); $("appreciation").value = state.appreciation; render(); }
+  file.st = st || undefined; file.rent = rent || undefined;
+  const added = [];
+  if (/\bwait(ing)?\b|cost of waiting/i.test(text)) { addCalc("cow", refi ? { mode: "refi" } : null, true); added.push("cost of waiting"); }
+  if (rent) { addCalc("rvb", { rent }, true); added.push("rent vs buy"); }
+  if (income || /\bafford/i.test(text)) { addCalc("aff", income ? { income } : null, true); added.push("affordability"); }
+  if (added.length) drawTabs();
+  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
 }
 $("quickForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $("quickIn").value.trim(); if (v) { quickDraft(v); $("quickIn").value = ""; } });
 
 async function loadList() {
   const { data, error } = await sb.from("comparisons").select("id, client_name, title, shared, updated_at").order("updated_at", { ascending: false }).limit(500);
-  if (error) { $("list").innerHTML = `<div class="empty">Couldn't load comparisons: ${error.message}</div>`; return; }
+  if (error) { $("list").innerHTML = `<div class="empty">Couldn't load clients: ${error.message}</div>`; return; }
   rows = data; drawList();
 }
 function drawList() {
   const q = $("search").value.trim().toLowerCase();
   const items = rows.filter((r) => !q || (r.client_name + " " + (r.title || "")).toLowerCase().includes(q));
   $("list").innerHTML = items.length ? items.map((r) => `<button type="button" data-id="${r.id}" aria-current="${current && current.id === r.id}">
-      <span class="n"></span><span class="m"></span></button>`).join("") : `<div class="empty">${rows.length ? "No clients match." : "No saved comparisons yet. Fill in the options below and save."}</div>`;
+      <span class="n"></span><span class="m"></span></button>`).join("") : `<div class="empty">${rows.length ? "No clients match." : "No saved clients yet. Fill in a calculator below and save."}</div>`;
   [...$("list").children].forEach((b, i) => {
     if (!b.dataset.id) return;
     const r = items[i];
@@ -1118,7 +1295,7 @@ async function staffFirstName(user) {
 }
 let presentCh = null, presenting = false, lastMove = 0, stateTimer = null;
 function channelFor(token) { return sb.channel("present-" + token, { config: { broadcast: { self: false } } }); }
-function sendPresent(event, payload) { if (presenting && presentCh) presentCh.send({ type: "broadcast", event, payload }); }
+function sendPresent(event, payload) { if (presenting && presentCh) presentCh.send({ type: "broadcast", event, payload: event === "state" ? shareView(payload) : payload }); }
 
 async function startPresenting() {
   if (!current || !current.shared) return;
@@ -1251,7 +1428,7 @@ const following = () => $("followOn").checked;
 function showLive(on) { $("livePill").hidden = !on; $("followWrap").hidden = !on; if (!on && pointerEl) pointerEl.hidden = true; }
 function followPresenter() {
   const ch = channelFor(clientToken);
-  ch.on("broadcast", { event: "state" }, ({ payload }) => { setState(payload); showLive(true); })
+  ch.on("broadcast", { event: "state" }, ({ payload }) => { setState(payload, !following()); showLive(true); })
     .on("broadcast", { event: "end" }, () => showLive(false))
     .on("broadcast", { event: "move" }, ({ payload }) => {
       const t = resolvePath(payload.ref); if (!t) return;
@@ -1321,8 +1498,9 @@ const splitEmails = (v) => (v || "").split(/[\s,;:]+/).map((x) => x.trim()).filt
 $("mailBtn").addEventListener("click", () => {
   const to = splitEmails($("cEmail").value);
   const first = ($("cName").value.trim().split(/\s+/)[0]) || "there";
-  const subject = "Your loan comparison" + ($("cTitle").value.trim() ? " – " + $("cTitle").value.trim() : "");
-  const body = `Hi ${first},\n\nHere are the loan options we talked about. You can open them any time with this private link:\n${$("shareUrl").value}\n\nLet me know if you have any questions.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}`;
+  const onlyCompare = file.calcs.filter(isShared).every((c) => c.kind === "compare");
+  const subject = (onlyCompare ? "Your loan comparison" : "Your home loan numbers") + ($("cTitle").value.trim() ? " – " + $("cTitle").value.trim() : "");
+  const body = `Hi ${first},\n\n${onlyCompare ? "Here are the loan options we talked about." : "Here are the numbers we went over."} You can open them any time with this private link:\n${$("shareUrl").value}\n\nLet me know if you have any questions.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}`;
   location.href = "mailto:" + to.map(encodeURIComponent).join(",") + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
   if (!to.length) say("saveStatus", "No client email yet, so add the address in your email app.");
 });
