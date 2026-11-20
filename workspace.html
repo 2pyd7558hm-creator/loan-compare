@@ -192,6 +192,24 @@ body.readonly .preset, body.readonly .preset-note { display: none }
 .lo-pointer svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)) }
 .lo-pointer span { position: absolute; left: 18px; top: 16px; white-space: nowrap; background: #c2410c; color: #fff; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 6px }
 .lo-glow { outline: 3px solid #f59e0b !important; outline-offset: 3px; border-radius: 6px; box-shadow: 0 0 0 8px rgba(245,158,11,.25) !important; transition: outline-color .3s }
+/* ===== Closing costs ===== */
+table.fees { min-width: 640px }
+table.fees td, table.fees th { padding: 6px 8px; vertical-align: middle }
+table.fees th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; text-align: left }
+table.fees input[type=text], table.fees input[type=number], table.fees select { padding: 5px 7px; font-size: 14px }
+table.fees input[type=number] { width: 96px }
+table.fees input.pct { width: 70px }
+table.fees input[type=checkbox] { width: auto }
+table.fees td.num, table.fees th.num { text-align: right; white-space: nowrap }
+table.fees tr.tot td { font-weight: 600; border-top: 1px solid var(--line) }
+table.fees .est { font-size: 11px; color: var(--muted); font-weight: 500 }
+.fee-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; margin-top: 10px }
+.fee-sum b { font-weight: 600 }
+.fee-empty { margin: 0; font-size: 14px; color: var(--muted) }
+.quick { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap }
+.quick input { flex: 1 1 320px }
+body.readonly .staff-only, body.readonly .fee-x { display: none }
+body.readonly table.fees input, body.readonly table.fees select { pointer-events: none; background: var(--soft); border-color: transparent }
 @media (prefers-reduced-motion: reduce) { .lo-pointer { transition: none } .live-pill::before { animation: none } }
 </style>
 <meta name="robots" content="noindex">
@@ -255,6 +273,10 @@ body.readonly .preset, body.readonly .preset-note { display: none }
           <div class="list" id="list"></div>
         </div>
         <div class="panel">
+          <form class="quick" id="quickForm">
+            <input id="quickIn" type="text" autocomplete="off" aria-label="Quick draft" placeholder="Quick draft: Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA">
+            <button class="btn" type="submit">Draft it</button>
+          </form>
           <div class="client-fields">
             <label class="f">Client name<input id="cName" type="text" autocomplete="off" placeholder="e.g. Jordan & Casey Smith"></label>
             <label class="f">Client email (optional)<input id="cEmail" type="email" autocomplete="off"></label>
@@ -304,12 +326,40 @@ body.readonly .preset, body.readonly .preset-note { display: none }
     </div>
   </section>
 
+  <section id="closingSec">
+    <div class="opts-head">
+      <h2>Closing costs</h2>
+      <label class="preset staff-only">Fee template
+        <select id="feeTpl" aria-label="Fill in closing costs from a fee template"><option value="">Choose a fee template…</option></select>
+      </label>
+    </div>
+    <div class="panel">
+      <p class="fee-empty" id="feeEmpty">No itemized closing costs. Choose a fee template to fill them in, or use each option's lender fees.</p>
+      <div class="table-wrap" id="feeWrap" hidden><table class="fees" id="feeTable"></table></div>
+      <div class="fee-sum" id="feeSum" hidden></div>
+      <div class="actions staff-only">
+        <button class="btn" id="feeAdd" type="button">+ Add a fee</button>
+        <button class="btn" id="feeClear" type="button" hidden>Clear closing costs</button>
+        <button class="btn" id="tplSaveOpen" type="button" hidden>Save as fee template…</button>
+        <span class="status" id="feeStatus"></span>
+      </div>
+      <div class="actions staff-only" id="tplSaveBox" hidden>
+        <input id="tplName" type="text" placeholder="Template name" aria-label="Template name" style="flex:1 1 200px">
+        <input id="tplState" type="text" placeholder="State, e.g. CO" aria-label="State" maxlength="2" style="width:120px">
+        <button class="btn primary" id="tplSaveBtn" type="button">Save template</button>
+        <button class="btn danger" id="tplDelBtn" type="button" hidden>Delete template</button>
+        <button class="btn link" id="tplCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </section>
+
   <section>
     <div class="opts-head">
       <h2>Loan options</h2>
       <label class="preset">Quick start
         <select id="preset" aria-label="Fill in a common comparison">
           <option value="">Choose a common comparison…</option>
+          <option value="starter">Conventional 3% vs 5% vs FHA 3.5%</option>
           <option value="down">Down payment: 5% vs 10% vs 20%</option>
           <option value="points">Points: none vs 1 vs 2</option>
           <option value="convfha">Conventional vs FHA</option>
@@ -341,7 +391,7 @@ body.readonly .preset, body.readonly .preset-note { display: none }
   <footer class="disclosure">
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
     <p><strong>For illustration only.</strong> This is not a loan offer, a commitment to lend, or a Loan Estimate. Figures are estimates based on the inputs shown. Actual rates, APRs, fees and payments depend on credit, property, loan amount, occupancy and market conditions, and are subject to underwriting approval. Rates can change daily.</p>
-    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%, VA funding fee 2.15% first use) as finance charges. Conventional PMI is shown until the balance reaches 78% of the purchase price. FHA annual MIP is shown for the life of the loan with less than 10% down, or 11 years otherwise. Cash to close shows down payment, points and lender fees only and excludes third-party costs, prepaids and escrow deposits. Taxes and insurance are estimates.</p>
+    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%, VA funding fee 2.15% first use) as finance charges. Conventional PMI is shown until the balance reaches 78% of the purchase price. FHA annual MIP is shown for the life of the loan with less than 10% down, or 11 years otherwise. Cash to close shows down payment, points and lender fees, plus third-party fees, prepaids and escrow deposits when closing costs are itemized. Fees paid by the seller or lender are not included. Prepaids and escrow deposits are estimates. Taxes and insurance are estimates.</p>
     <p id="brandFoot"></p>
     <p class="links"><a href="https://www.nmlsconsumeraccess.org/" target="_blank" rel="noopener">NMLS Consumer Access</a> · <a href="https://bit.ly/TexasRecoveryFundNotice" target="_blank" rel="noopener">Texas Recovery Fund Notice</a> · <a href="https://www.thatmortgagecouple.com/legal" target="_blank" rel="noopener">Legal</a> · <a href="https://www.thatmortgagecouple.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></p>
   </footer>
@@ -358,6 +408,7 @@ const LETTERS = ["A", "B", "C", "D"];
 const HORIZONS = [3, 5, 7, 10, 15, 30];
 const state = {
   price: 450000, taxes: 5400, insurance: 1500, hoa: 0, appreciation: 3, horizon: 7,
+  closing: { template: "", items: [] },
   scenarios: [
     { name: "30-yr fixed, no points", type: "conv", term: 30, rate: 6.875, points: 0,    fees: 1495, downPct: 10,  mi: 0.45 },
     { name: "30-yr fixed, buy down",  type: "conv", term: 30, rate: 6.375, points: 1.5,  fees: 1495, downPct: 10,  mi: 0.45 },
@@ -383,7 +434,8 @@ function analyze(s) {
   const n = s.term * 12, r = s.rate / 1200;
   const pi = loan === 0 ? 0 : r ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n;
   const pointsCost = loan * s.points / 100;
-  const upfront = pointsCost + s.fees + financed;
+  const cc = closingTotals(loan);
+  const upfront = pointsCost + s.fees + cc.apr + cc.other + financed;
   const miMonths = s.type === "fha" ? (s.downPct < 10 ? n : 132) : n;
 
   const bal = [loan], cost = [upfront], equity = [value - loan], pay = [];
@@ -404,7 +456,7 @@ function analyze(s) {
     equity.push(value * Math.pow(1 + state.appreciation / 100, m / 12) - b);
   }
   // APR: monthly rate i where PV(payments) = amount financed
-  const amtFin = loan - financed - pointsCost - s.fees;
+  const amtFin = loan - financed - pointsCost - s.fees - cc.apr;
   let apr = s.rate;
   if (amtFin > 0 && pay.length) {
     const pv = (i) => pay.reduce((acc, x, k) => acc + x / Math.pow(1 + i, k + 1), 0);
@@ -414,7 +466,30 @@ function analyze(s) {
   }
   const escrow = state.taxes / 12 + state.insurance / 12 + state.hoa;
   return { s, down, loan, financed, pi, mi: firstMI || 0, escrow, total: pi + (firstMI || 0) + escrow,
-           pointsCost, cashToClose: down + pointsCost + s.fees, apr, bal, cost, equity, n };
+           pointsCost, cc, lenderFees: s.fees + cc.apr, cashToClose: down + pointsCost + s.fees + cc.apr + cc.other + cc.prepaid, apr, bal, cost, equity, n };
+}
+
+/* ---------- Closing costs (itemized from a fee template) ---------- */
+// A fee is a flat amount plus a percent. Deed/transfer taxes are a percent of the price; other percents are of the loan amount.
+// Prepaids left at $0 are estimated from the taxes and insurance above.
+function feeAmount(it, loan) {
+  const base = /deed|transfer|stamp/i.test(it.name) ? state.price : loan;
+  let a = (+it.amt || 0) + base * (+it.pct || 0) / 100, est = false;
+  if (!a && it.prepaid) {
+    if (/hazard.*premium|insurance premium/i.test(it.name)) { a = state.insurance; est = true; }
+    else if (/hazard.*reserve|insurance reserve/i.test(it.name)) { a = state.insurance / 12 * 2; est = true; }
+    else if (/tax.*reserve/i.test(it.name)) { a = state.taxes / 12 * 3; est = true; }
+  }
+  return { a, est };
+}
+function closingTotals(loan) {
+  const t = { apr: 0, other: 0, prepaid: 0, seller: 0, lender: 0 };
+  for (const it of (state.closing && state.closing.items) || []) {
+    const { a } = feeAmount(it, loan);
+    if (it.by === "S") t.seller += a; else if (it.by === "L") t.lender += a;
+    else if (it.prepaid) t.prepaid += a; else if (it.apr) t.apr += a; else t.other += a;
+  }
+  return t;
 }
 
 function breakEven(a, base) {
@@ -454,7 +529,7 @@ function renderCards() {
         ${field("Term", "term", i, s, { select: [[30, "30 years"], [25, "25 years"], [20, "20 years"], [15, "15 years"], [10, "10 years"]] })}
         ${field("Interest rate", "rate", i, s, { suf: "%", step: 0.125 })}
         ${field("Points", "points", i, s, { suf: "%", step: 0.125 })}
-        ${field("Lender fees", "fees", i, s, { pre: "$", step: 50 })}
+        ${field(hasClosing() ? "Extra lender fees" : "Lender fees", "fees", i, s, { pre: "$", step: 50 })}
         ${field("Down payment", "downPct", i, s, { suf: "%", step: 0.5 })}
         ${s.type === "va" ? "" : field(s.type === "fha" ? "Annual MIP" : "PMI rate / yr", "mi", i, s, { suf: "%", step: 0.05 })}
       </div>
@@ -524,6 +599,7 @@ function lineChart(el, series, marker) {
 /* ---------- Render ---------- */
 function render() {
   const res = state.scenarios.map(analyze);
+  renderClosing(res[0]);
   const h = state.horizon * 12;
   const base = res[0];
   [...$("horizon").children].forEach((b) => b.setAttribute("aria-pressed", +b.dataset.y === state.horizon));
@@ -557,7 +633,8 @@ function render() {
     ${group("Cash to close")}
     ${row("Down payment", (r) => `${usd.format(r.down)} <span style="color:var(--muted)">(${pct(r.s.downPct, 2)})</span>`)}
     ${row("Points", (r) => usd.format(r.pointsCost))}
-    ${row("Lender fees", (r) => usd.format(r.s.fees))}
+    ${row(hasClosing() ? "Lender fees (in APR)" : "Lender fees", (r) => usd.format(r.lenderFees))}
+    ${hasClosing() ? row("Third-party fees", (r) => usd.format(r.cc.other)) + row("Prepaids &amp; escrow deposits", (r) => usd.format(r.cc.prepaid)) : ""}
     ${row("Estimated cash to close", (r) => usd.format(r.cashToClose), bCash, "strong")}
     ${group("Over time")}
     ${row(`Total cost at ${state.horizon} yrs`, (r, i) => usd.format(r.cost[h]) + (i === bCost ? `<span class="pill">Lowest</span>` : ""), bCost, "strong")}
@@ -590,12 +667,90 @@ function render() {
 $("brandFoot").textContent = `${BRAND.name}, powered by ${BRAND.company} · ${BRAND.nmls} · ${BRAND.address} · Equal Housing Opportunity.`;
 
 
+const DEFAULT_FEE_TEMPLATES = [
+  {"name":"Xpert Purchase","state":"CO","items":[{"name":"Underwriting Fee","amt":1295,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Processing Fee","amt":1095,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":850,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":139,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":2450,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":86,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":105,"pct":0.001,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":400,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":728,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":2400,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"Xpert Purchase (2)","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":1850,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.001,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"Xpert Condo Purchase","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Condo/PUD Certification","amt":400,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":1850,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.001,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"Xpert Refinance","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":750,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Closing Fee","amt":350,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"Broker Purchase UWM","state":"CO","items":[{"name":"Underwriting Fee","amt":1110,"pct":0,"by":"L","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":750,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":7,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"MERS Registration","amt":24,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee (second line, check)","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Misc Title Services","amt":100,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.01,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"NH Purchase","state":"NH","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":715,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":500,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.77,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Tax Service Fee (second line, check)","amt":195,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Premium","amt":1550.04,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Reserves","amt":258.34,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":648,"pct":0,"by":"B","apr":false,"prepaid":true}]}
+];
+let feeTemplates = DEFAULT_FEE_TEMPLATES.slice();
+const hasClosing = () => !!(state.closing && state.closing.items.length);
+const BY = [["B", "Borrower"], ["S", "Seller"], ["L", "Lender"]];
+const escAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+let feeRowsKey = "";
+function renderClosing(a) {
+  const items = state.closing.items, has = items.length > 0;
+  $("feeEmpty").hidden = has; $("feeWrap").hidden = !has; $("feeSum").hidden = !has;
+  $("feeClear").hidden = !has; $("tplSaveOpen").hidden = !has;
+  document.getElementById("closingSec").hidden = !has && document.body.classList.contains("readonly");
+  if (!has) { feeRowsKey = ""; $("feeTable").innerHTML = ""; return; }
+  const loan = a ? a.loan : state.price;
+  const key = items.length + ":" + state.closing.template;
+  // Rebuild inputs only when rows change, so typing keeps focus; otherwise refresh the computed column.
+  if (key !== feeRowsKey || !$("feeTable").rows.length || !$("feeTable").contains(document.activeElement)) {
+    feeRowsKey = key;
+    $("feeTable").innerHTML = `<thead><tr><th>Fee</th><th>Amount</th><th>+ %</th><th>Paid by</th><th title="Counts toward the APR">APR</th><th title="Prepaid or escrow deposit">Prepaid</th><th class="num">Est. (option A)</th><th class="staff-only"></th></tr></thead><tbody>` +
+      items.map((it, i) => `<tr data-f="${i}">
+        <td><input type="text" data-k="name" value="${escAttr(it.name)}" aria-label="Fee name"></td>
+        <td><div class="affix pre"><span>$</span><input type="number" min="0" step="1" data-k="amt" value="${+it.amt || 0}" aria-label="Amount"></div></td>
+        <td><input class="pct" type="number" min="0" step="0.001" data-k="pct" value="${+it.pct || 0}" aria-label="Percent"></td>
+        <td><select data-k="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select></td>
+        <td><input type="checkbox" data-k="apr"${it.apr ? " checked" : ""} aria-label="Counts toward APR"></td>
+        <td><input type="checkbox" data-k="prepaid"${it.prepaid ? " checked" : ""} aria-label="Prepaid or escrow"></td>
+        <td class="num" data-out></td>
+        <td class="staff-only"><button class="icon-btn fee-x" type="button" data-del="${i}" aria-label="Remove fee">×</button></td>
+      </tr>`).join("") + `</tbody>`;
+  }
+  items.forEach((it, i) => {
+    const { a: amt, est } = feeAmount(it, loan);
+    const cell = $("feeTable").querySelector(`tr[data-f="${i}"] [data-out]`);
+    if (cell) cell.innerHTML = usd.format(amt) + (est ? ` <span class="est">est.</span>` : "") + (it.by !== "B" ? ` <span class="est">${it.by === "S" ? "seller" : "lender"}</span>` : "");
+  });
+  const t = closingTotals(loan);
+  $("feeSum").innerHTML = `<span>Lender fees (in APR) <b>${usd.format(t.apr)}</b></span><span>Third-party fees <b>${usd.format(t.other)}</b></span><span>Prepaids &amp; escrow <b>${usd.format(t.prepaid)}</b></span>` +
+    (t.seller ? `<span>Paid by seller <b>${usd.format(t.seller)}</b></span>` : "") + (t.lender ? `<span>Paid by lender <b>${usd.format(t.lender)}</b></span>` : "") +
+    (state.closing.template ? `<span style="color:var(--muted)">From template: ${escAttr(state.closing.template)}</span>` : "");
+}
+$("feeTable").addEventListener("input", (e) => {
+  const t = e.target, tr = t.closest("tr[data-f]"); if (!tr || !t.dataset.k) return;
+  const it = state.closing.items[+tr.dataset.f], k = t.dataset.k;
+  it[k] = t.type === "checkbox" ? t.checked : (k === "name" || k === "by") ? t.value : (+t.value || 0);
+  render();
+});
+$("feeTable").addEventListener("click", (e) => {
+  const d = e.target.closest("[data-del]"); if (!d) return;
+  state.closing.items.splice(+d.dataset.del, 1); feeRowsKey = ""; renderCards(); render();
+});
+$("feeAdd").addEventListener("click", () => {
+  if (!hasClosing()) state.scenarios.forEach((s) => s.fees = 0);
+  state.closing.items.push({ name: "New fee", amt: 0, pct: 0, by: "B", apr: false, prepaid: false });
+  feeRowsKey = ""; renderCards(); render();
+  const rows = $("feeTable").querySelectorAll("tbody tr"); const inp = rows[rows.length - 1].querySelector("input"); inp.focus(); inp.select();
+});
+$("feeClear").addEventListener("click", () => { state.closing = { template: "", items: [] }; renderCards(); render(); });
+function fillFeeTemplateSelect() {
+  const sel = $("feeTpl"), states = [...new Set(feeTemplates.map((t) => t.state || "Other"))].sort();
+  sel.innerHTML = `<option value="">Choose a fee template…</option>` + states.map((st) => `<optgroup label="${escAttr(st)}">` +
+    feeTemplates.map((t, i) => (t.state || "Other") === st ? `<option value="${i}">${escAttr(t.name)}</option>` : "").join("") + `</optgroup>`).join("");
+}
+function applyFeeTemplate(t) {
+  state.closing = { template: t.name, items: JSON.parse(JSON.stringify(t.items)) };
+  state.scenarios.forEach((s) => s.fees = 0); // the template now carries the lender fees
+  feeRowsKey = ""; renderCards(); render();
+  say("feeStatus", `Filled in from “${t.name}”. Edit any fee for this client; the template itself doesn't change.`);
+}
+$("feeTpl").addEventListener("change", (e) => { const t = feeTemplates[+e.target.value]; if (e.target.value !== "" && t) applyFeeTemplate(t); e.target.value = ""; });
+fillFeeTemplateSelect();
+
 /* ---------- Quick-start presets: build options from option A's rate and fees ---------- */
 function applyPreset(kind) {
   const a = { ...state.scenarios[0] };
   const r = +a.rate || 6.75, fees = a.fees, down = a.downPct;
   const conv = (o) => ({ type: "conv", term: 30, rate: r, points: 0, fees, downPct: down, mi: 0.45, ...o });
   const P = {
+    starter: [conv({ name: "Conventional, 3% down", downPct: 3, mi: 0.62 }), conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }],
     down: [conv({ name: "5% down", downPct: 5, mi: 0.55 }), conv({ name: "10% down", downPct: 10, mi: 0.45 }), conv({ name: "20% down, no PMI", downPct: 20, rate: +(r - 0.125).toFixed(3) })],
     points: [conv({ name: "No points" }), conv({ name: "1 point", points: 1, rate: +(r - 0.25).toFixed(3) }), conv({ name: "2 points", points: 2, rate: +(r - 0.5).toFixed(3) })],
     convfha: [conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }],
@@ -626,6 +781,7 @@ const TOP_KEYS = ["price", "taxes", "insurance", "hoa", "appreciation"];
 function getState() { return JSON.parse(JSON.stringify({ ...state })); }
 function setState(obj) {
   Object.assign(state, obj);
+  state.closing = obj.closing ? JSON.parse(JSON.stringify(obj.closing)) : { template: "", items: [] };
   TOP_KEYS.forEach((k) => { $(k).value = state[k]; });
   renderCards(); render();
 }
@@ -661,7 +817,88 @@ async function staffView(session) {
   lock(false); show("vStaff");
   await loadList();
   newComparison();
+  loadFeeTemplates();
 }
+
+/* ---- Fee templates (shared by staff, stored in Supabase) ---- */
+let tplFromDb = false;
+async function loadFeeTemplates() {
+  const { data, error } = await sb.from("fee_templates").select("id, name, state, items").order("state").order("name");
+  if (error || !data) { tplFromDb = false; feeTemplates = DEFAULT_FEE_TEMPLATES.slice(); }
+  else { tplFromDb = true; feeTemplates = data.length ? data : DEFAULT_FEE_TEMPLATES.slice(); }
+  fillFeeTemplateSelect();
+}
+$("tplSaveOpen").addEventListener("click", () => {
+  const cur = feeTemplates.find((t) => t.name === state.closing.template);
+  $("tplName").value = state.closing.template || ""; $("tplState").value = cur ? cur.state || "" : "";
+  $("tplDelBtn").hidden = !(cur && cur.id);
+  $("tplSaveBox").hidden = false; $("tplName").focus();
+});
+$("tplCancel").addEventListener("click", () => { $("tplSaveBox").hidden = true; });
+$("tplName").addEventListener("input", () => { const cur = feeTemplates.find((t) => t.name === $("tplName").value.trim()); $("tplDelBtn").hidden = !(cur && cur.id); });
+$("tplSaveBtn").addEventListener("click", async () => {
+  const name = $("tplName").value.trim(), st = $("tplState").value.trim().toUpperCase() || null;
+  if (!name) { say("feeStatus", "Give the template a name.", true); return; }
+  if (!tplFromDb) { say("feeStatus", "Fee templates can't be saved yet: the fee_templates table isn't set up in the database.", true); return; }
+  const exists = feeTemplates.some((t) => t.name === name && t.id);
+  const { error } = await sb.from("fee_templates").upsert({ name, state: st, items: state.closing.items }, { onConflict: "name" });
+  if (error) { say("feeStatus", "Template not saved: " + error.message, true); return; }
+  state.closing.template = name; $("tplSaveBox").hidden = true;
+  await loadFeeTemplates(); render();
+  say("feeStatus", exists ? `Updated the “${name}” template for everyone.` : `Saved “${name}” as a new template.`);
+});
+$("tplDelBtn").addEventListener("click", async () => {
+  const name = $("tplName").value.trim(), cur = feeTemplates.find((t) => t.name === name && t.id);
+  if (!cur) return;
+  if ($("tplDelBtn").dataset.sure !== "1") { $("tplDelBtn").dataset.sure = "1"; $("tplDelBtn").textContent = "Click again to delete"; return; }
+  $("tplDelBtn").dataset.sure = ""; $("tplDelBtn").textContent = "Delete template";
+  const { error } = await sb.from("fee_templates").delete().eq("id", cur.id);
+  if (error) { say("feeStatus", "Template not deleted: " + error.message, true); return; }
+  $("tplSaveBox").hidden = true; await loadFeeTemplates();
+  say("feeStatus", `Deleted the “${name}” template. This comparison keeps its fees.`);
+});
+
+/* ---- Quick draft: "Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA" ---- */
+const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
+function quickDraft(text) {
+  const parts = text.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+  const low = text.toLowerCase();
+  let price = null, st = null, name = null, addr = null;
+  const m = text.match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d+)?\s*(k|m)?\b|\$\s*(\d+(?:\.\d+)?)\s*(k|m)\b|\b(\d+(?:\.\d+)?)\s*(k|m)\b/i);
+  if (m) {
+    const num = parseFloat((m[1] || m[3] || m[5]).replace(/,/g, "")), unit = (m[2] || m[4] || m[6] || "").toLowerCase();
+    price = unit === "k" ? num * 1e3 : unit === "m" ? num * 1e6 : num;
+    if (price < 10000) price = null;
+  }
+  for (const p of parts) {
+    const up = p.toUpperCase().replace(/\./g, "");
+    if (!st && US_STATES.includes(up) && up !== "VA") { st = up; continue; }
+    if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
+    if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p)) { addr = p; continue; }
+    if (!name && /^[a-z][a-z .'&-]+$/i.test(p) && !/\b(conv|conventional|fha|va|vs|points?|down|refi|refinance|condo|year|yr)\b/i.test(p) && !US_STATES.includes(up)) name = p;
+  }
+  const refi = /\brefi(nance)?\b/.test(low), condo = /\bcondo\b/.test(low);
+  let preset = "starter";
+  if (/\bpoints?\b|buy ?down/.test(low)) preset = "points";
+  else if (/\b15\b/.test(low)) preset = "term";
+  else if (/\bva\b/.test(low) && /\bfha\b/.test(low)) preset = "convfhava";
+  else if (/\bfha\b/.test(low)) preset = "convfha";
+  else if (/\bdown\b/.test(low)) preset = "down";
+  // Start a fresh comparison, then fill it in
+  newComparison();
+  if (name) $("cName").value = name;
+  $("cTitle").value = (refi ? "Refinance options" : "Purchase options") + (addr ? ", " + addr : "");
+  if (price) { state.price = price; $("price").value = price; }
+  if (st) {
+    const pool = feeTemplates.filter((t) => (t.state || "").toUpperCase() === st);
+    const pick = pool.find((t) => refi ? /refi/i.test(t.name) : condo ? /condo/i.test(t.name) : !/refi|condo/i.test(t.name)) || pool[0];
+    if (pick) applyFeeTemplate(pick);
+  }
+  applyPreset(preset);
+  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + $("preset").querySelector(`option[value="${preset}"]`).textContent];
+  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + ". Check the rates and pricing, then save.");
+}
+$("quickForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $("quickIn").value.trim(); if (v) { quickDraft(v); $("quickIn").value = ""; } });
 
 async function loadList() {
   const { data, error } = await sb.from("comparisons").select("id, client_name, title, shared, updated_at").order("updated_at", { ascending: false }).limit(500);

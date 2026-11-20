@@ -7,6 +7,7 @@ Side-by-side mortgage comparisons for That Mortgage Couple, powered by Xpert Hom
 | `index.html` | Public calculator. Nothing is saved. Can also be pasted into a LenderHomePage custom-code page. |
 | `workspace.html` | Loan officer workspace: sign in, save comparisons per client, turn on a private read-only client link (`workspace.html?c=<token>`). |
 | `supabase/001_schema.sql` | Database tables and row-level security rules (already applied to the Supabase project). |
+| `supabase/002_fee_templates.sql` | Shared closing-cost (fee) templates, with the starting templates copied from the team's existing ones. |
 
 ## How it works
 
