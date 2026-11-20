@@ -104,7 +104,7 @@ const CALC_KINDS = ["none", "cow", "rvb", "aff", "debt", "amort", "arm", "equity
 const ACTION = {
   type: "object", additionalProperties: false,
   properties: {
-    op: { type: "string", enum: ["set_price", "set_location", "update_option", "add_option", "remove_option", "add_calc", "set_refi"] },
+    op: { type: "string", enum: ["set_price", "set_location", "update_option", "add_option", "remove_option", "add_calc", "set_refi", "round_up"] },
     index: { type: "integer" },
     type: { type: "string", enum: ["keep", "conv", "fha", "va", "jumbo"] },
     term: N, arm: { type: "integer", enum: [-1, 0, 3, 5, 7, 10] }, rate: N, points: N, down_pct: N,
@@ -137,6 +137,7 @@ Return:
   - remove_option: index of the option to remove.
   - add_calc: calc = one of cow (cost of waiting), rvb (rent vs buy; value = monthly rent if known), aff (affordability; value = yearly income if known), debt (debt consolidation), amort (extra payments; value = extra dollars a month if known), arm (ARM vs fixed), equity (equity and appreciation), invest (investment property), cash (cost of paying cash; value = dollars in investments or a brokerage account they would sell, if mentioned). Don't add a calculator that's already in FORM.tabs.
   - set_refi: flag true for a refinance, false for a purchase.
+  - round_up: index = the option, value = the monthly payment to round up to (e.g. "round up option B to $3,000" -> index 1, value 3000; "round up A" with no amount -> value 0, which rounds to the next $100; FORM.options[i].payment is that option's monthly payment now). This opens the Extra payments calculator from that option, with the extra amount set to the difference.
   For every action, fill fields you don't use with the keep values above, index -1, value 0, state "", county "", calc "none", flag false.
 - suggest_calc / suggest_text: when no calculator was asked for this turn, you may suggest ONE calculator that isn't in FORM.tabs and would help this client, with a short yes/no question in suggest_text (for example after three or more options: amort, "Want to show how extra payments could pay one of these off faster?"; with an ARM: arm; with a small down payment or FHA: rvb; when cash or savings come up: cash). Otherwise suggest_calc "none" and suggest_text "". Don't suggest one the conversation shows the loan officer already turned down.
 
