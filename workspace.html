@@ -1982,7 +1982,7 @@ async function runAi(job, final) {
   }
   aiAskDone();
   if (!data.draft) quickDraft(job.raw); else applyAi(job, data.draft);
-  asAfterDraft();
+  asAfterDraft(); offerSaved();
 }
 try { if (localStorage.getItem("aiReader") === "off") $("aiOn").checked = false; } catch (e) { /* storage blocked */ }
 $("aiOn").addEventListener("change", (e) => { try { localStorage.setItem("aiReader", e.target.checked ? "on" : "off"); } catch (err) { /* storage blocked */ } });
@@ -1991,6 +1991,8 @@ $("quickForm").addEventListener("submit", (e) => {
   $("quickIn").value = "";
   // Shown in the conversation; names stay in the browser
   asUser(v);
+  if (clientByName(v)) return;
+  if (asPending && asPending.kind === "pick") { const h = asPending; asPending = null; h.answer(v); return; }
   if ($("aiOn").checked && clientOpen()) {
     const b = noteBasics(v), cur = $("cName").value.trim().toLowerCase();
     // A different client only when the note names someone (capitalized, like "Mike Brown") and gives a price or loan options
@@ -2001,18 +2003,64 @@ $("quickForm").addEventListener("submit", (e) => {
   // An answer to the assistant's question, unless it's clearly a new note (another client, or a price with loan options)
   if (asPending) {
     const b = noteBasics(v), cur = $("cName").value.trim().toLowerCase();
-    const fresh = FOLLOW_RE.test(v) || (b.name && b.name.toLowerCase() !== cur && (b.price || optionSpecs(v).length >= 1)) || (asPending.kind !== "price" && b.price && optionSpecs(v).length >= 1);
+    const fresh = asPending.kind === "newclient" ? !!(b.name && isNameCase(b.name) && b.name.split(/\s+/).length >= 2) : FOLLOW_RE.test(v) || (b.name && b.name.toLowerCase() !== cur && (b.price || optionSpecs(v).length >= 1)) || (asPending.kind !== "price" && b.price && optionSpecs(v).length >= 1);
     if (!fresh) { const h = asPending; asPending = null; h.answer(v); return; }
     asPending = null; asQueue = [];
   }
   aiAskDone();
   if (isFollowUp(v)) { asAfterDraft(followUp(v)); return; }
-  asReset(); asUser(v);
-  if (!$("aiOn").checked) { quickDraft(v); asAfterDraft(); return; }
+  startDraft(v);
+});
+function startDraft(v, shown) {
+  asReset(); asUser(shown || v);
+  if (!$("aiOn").checked) { quickDraft(v); asAfterDraft(); offerSaved(); return; }
   newComparison(); // clear the last client while the AI reader works, so a question isn't shown over someone else's file
   const st = stripNote(v);
   runAi({ raw: v, note: st.note, name: st.name, addr: st.addr, answers: [] });
-});
+}
+/* ---- A client's name: open their saved file, or start a new one ---- */
+const nameKey = (n) => String(n || "").toLowerCase().replace(/[^a-z& ]+/g, " ").split(/\s+/).filter((w) => w && !/^(and|&)$/.test(w));
+function savedMatches(name) {
+  const want = nameKey(name); if (!want.length) return [];
+  return rows.filter((r) => { const have = nameKey(r.client_name); return want.every((w) => have.includes(w)); }).slice(0, 3);
+}
+const isNameCase = (n) => n.split(/\s+/).every((w) => /^[A-Z][a-z.'-]*$|^&$|^and$/.test(w));
+// "John Smith", "open John Smith", "new client John Smith": just a name, nothing about the loan
+function clientByName(v) {
+  const cmd = /^\s*(?:please\s+)?(?:open|pull up|load|find|show me|switch to|go to|new client)\b\s*[:\-]?\s*/i.test(v);
+  const b = noteBasics(v.replace(/^\s*(?:please\s+)?(?:open|pull up|load|find|show me|switch to|go to|new client)\b\s*[:\-]?\s*/i, ""));
+  // one capitalized word ("Perfect") isn't a name unless they said "open" or "new client"
+  if (!b.name || !isNameCase(b.name) || (!cmd && b.name.split(/\s+/).length < 2)) return false;
+  const cur = $("cName").value.trim().toLowerCase();
+  if (b.name.toLowerCase() === cur) return false;
+  const rest = v.split(b.name).join(" ").replace(/\b(new|client|clients|open|pull|up|load|show|me|find|switch|to|go|the|file|for|please|start|a|named|buyer|borrower|is)\b|[,.:;!?-]/gi, " ").trim();
+  if (rest) return false;
+  const isNew = /\bnew\b/i.test(v), name = b.name, hits = isNew ? [] : savedMatches(name);
+  const fresh = () => {
+    asReset(); asUser(v); newComparison();
+    asSay(`New client: ${name}. What's the price, and which loans should I compare? For example "$650,000, Denver CO, 30 yr fixed vs 15 yr fixed".`, null,
+      { kind: "newclient", answer: (a) => startDraft(name + ", " + a, a) });
+  };
+  if (!hits.length) { fresh(); return true; }
+  const label = (r) => r.client_name + (r.client_code ? ` (${r.client_code})` : "");
+  if (hits.length === 1) {
+    const btns = [{ label: "Open it", fn: () => openComparison(hits[0].id) }, { label: "Start a new client", fn: fresh }];
+    const ask = (t) => asSay(t, btns, { kind: "pick", answer: (a) => /^\s*(y|yes|yeah|yep|sure|ok|okay|open)\b/i.test(a) ? openComparison(hits[0].id) : /\b(no|nope|new)\b/i.test(a) ? fresh() : ask("Tap Open it, or Start a new client.") });
+    ask(`You have a saved client named ${label(hits[0])}. Open it?`);
+    return true;
+  }
+  asSay(`You have ${hits.length} saved clients that match. Which one?`, [...hits.map((r) => ({ label: label(r), fn: () => openComparison(r.id) })), { label: "Start a new client", fn: fresh }]);
+  return true;
+}
+// After a new draft: if a saved client has the same name, offer to open that one instead
+function offerSaved() {
+  const name = $("cName").value.trim(); if (!name || current) return;
+  const hits = savedMatches(name).filter((r) => nameKey(r.client_name).join(" ") === nameKey(name).join(" "));
+  if (hits.length !== 1 || asPending) return;
+  const r = hits[0], last = asLog[asLog.length - 1];
+  if (last && last.who === "a" && !last.buttons) last.text += ` (You also have a saved ${r.client_name}${r.client_code ? " (" + r.client_code + ")" : ""}; say "open ${r.client_name}" to switch to it.)`;
+  asRender();
+}
 $("quickIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("quickForm").requestSubmit(); } });
 asRender();
 $("cName").addEventListener("input", () => asRender());
