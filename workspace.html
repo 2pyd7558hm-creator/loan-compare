@@ -52,6 +52,8 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0 }
 
 main { display: grid; gap: 28px; padding-block: 28px 40px }
 main > * { min-width: 0 }
+body { position: relative }
+#overlays { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 48 }
 .intro h1 { font-size: clamp(24px, 4vw, 32px); font-weight: 600 }
 .intro p { color: var(--muted); max-width: 62ch; margin: 6px 0 0 }
 .sample { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-deep); margin-bottom: 6px }
@@ -191,8 +193,10 @@ body.readonly .preset, body.readonly .preset-note { display: none }
 @keyframes pulse { 50% { opacity: .3 } }
 .lo-pointer { position: absolute; z-index: 50; pointer-events: none; transform: translate(-3px, -3px); transition: left .08s linear, top .08s linear }
 .lo-pointer svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)) }
+.lo-pointer.flip span { left: auto; right: 6px }
 .lo-pointer span { position: absolute; left: 18px; top: 16px; white-space: nowrap; background: #c2410c; color: #fff; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 6px }
 .lo-glow { outline: 3px solid #f59e0b !important; outline-offset: 3px; border-radius: 6px; box-shadow: 0 0 0 8px rgba(245,158,11,.25) !important; transition: outline-color .3s }
+td.lo-glow, th.lo-glow { outline-offset: -3px !important; box-shadow: inset 0 0 0 999px rgba(245,158,11,.16) !important; border-radius: 0 }
 /* ===== Closing costs ===== */
 table.fees { min-width: 640px }
 table.fees td, table.fees th { padding: 6px 8px; vertical-align: middle }
@@ -1076,15 +1080,30 @@ function groupRects(g) {
   if (!rects.length) return null;
   return { el: tbl.rows[g.r0] && tbl.rows[g.r0].cells[g.c0], left: Math.min(...rects.map((x) => x.left)), top: Math.min(...rects.map((x) => x.top)), right: Math.max(...rects.map((x) => x.right)), bottom: Math.max(...rects.map((x) => x.bottom)) };
 }
+// Pointer and highlight boxes live in a layer clipped to the page, so they can never make a phone's page wider
+const overlays = document.createElement("div"); overlays.id = "overlays"; document.body.appendChild(overlays);
+let glowEl = null, glowTimer = null;
+function glowAt(t, scroll) {
+  if (glowEl) glowEl.classList.remove("lo-glow");
+  glowEl = t; t.classList.add("lo-glow");
+  if (scroll) {
+    const r = t.getBoundingClientRect(), wrap = t.closest(".table-wrap");
+    const offX = wrap && (() => { const w = wrap.getBoundingClientRect(); return r.left < w.left || r.right > w.right; })();
+    if (r.top < 70 || r.bottom > innerHeight - 20 || offX) t.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  }
+  clearTimeout(glowTimer); glowTimer = setTimeout(() => t.classList.remove("lo-glow"), 6000);
+}
 let boxEl = null, boxTimer = null, boxGroup = null;
 function placeBox() {
   if (!boxEl || !boxGroup) return;
   const u = groupRects(boxGroup); if (!u) { boxEl.hidden = true; return; }
+  const wrap = u.el && u.el.closest(".table-wrap");
+  if (wrap) { const w = wrap.getBoundingClientRect(); u.left = Math.max(u.left, w.left + 4); u.right = Math.min(u.right, w.right - 4); if (u.right <= u.left) { boxEl.hidden = true; return; } }
   Object.assign(boxEl.style, { left: (u.left + scrollX - 4) + "px", top: (u.top + scrollY - 4) + "px", width: (u.right - u.left + 8) + "px", height: (u.bottom - u.top + 8) + "px" });
   boxEl.hidden = false;
 }
 function showGroup(g, scroll) {
-  if (!boxEl) { boxEl = document.createElement("div"); boxEl.className = "lo-box"; document.body.appendChild(boxEl); }
+  if (!boxEl) { boxEl = document.createElement("div"); boxEl.className = "lo-box"; overlays.appendChild(boxEl); }
   boxGroup = g;
   const u = groupRects(g); if (!u) return;
   if (scroll && u.el) {
@@ -1126,7 +1145,7 @@ mainEl.addEventListener("click", (e) => {
     if (g) { sendPresent("group", g); showGroup(g, false); return; }
   }
   const target = e.target.closest("td, th, .hl, .bar-row, .card, .chart, label, button, .panel") || e.target;
-  const ref = pathOf(target); if (ref) sendPresent("glow", { ref });
+  const ref = pathOf(target); if (ref) { sendPresent("glow", { ref }); glowAt(target, false); }
 }, true);
 
 // Scrolling: send what's at the top of the screen so the client's screen (any size) lines up with it
@@ -1149,7 +1168,7 @@ const _render = render;
 render = function () { _render(); if (presenting) { clearTimeout(stateTimer); stateTimer = setTimeout(() => sendPresent("state", getState()), 150); } };
 
 // Client side: follow the presenter
-let pointerEl = null, glowEl = null, glowTimer = null, idleTimer = null;
+let pointerEl = null, idleTimer = null;
 const following = () => $("followOn").checked;
 function showLive(on) { $("livePill").hidden = !on; $("followWrap").hidden = !on; if (!on && pointerEl) pointerEl.hidden = true; }
 function followPresenter() {
@@ -1161,22 +1180,22 @@ function followPresenter() {
       if (!pointerEl) {
         pointerEl = document.createElement("div"); pointerEl.className = "lo-pointer";
         pointerEl.innerHTML = '<svg width="20" height="22" viewBox="0 0 20 22"><path d="M2 2l15 8-7 2-3 7z" fill="#c2410c" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg><span>Loan officer</span>';
-        document.body.appendChild(pointerEl);
+        overlays.appendChild(pointerEl);
       }
       const r = t.getBoundingClientRect();
-      pointerEl.style.left = (r.left + scrollX + payload.fx * r.width) + "px";
-      pointerEl.style.top = (r.top + scrollY + payload.fy * r.height) + "px";
-      pointerEl.hidden = false; showLive(true);
+      let x = r.left + payload.fx * r.width, y = r.top + payload.fy * r.height;
+      const wrap = t.closest(".table-wrap"), w = wrap && wrap.getBoundingClientRect();
+      const outside = w && (x < w.left || x > w.right);
+      x = Math.max(0, Math.min(x, document.documentElement.clientWidth - 24));
+      pointerEl.style.left = (x + scrollX) + "px";
+      pointerEl.style.top = (y + scrollY) + "px";
+      pointerEl.classList.toggle("flip", x > document.documentElement.clientWidth - 110);
+      pointerEl.hidden = !!outside; showLive(true);
       clearTimeout(idleTimer); idleTimer = setTimeout(() => { if (pointerEl) pointerEl.hidden = true; }, 8000);
     })
     .on("broadcast", { event: "glow" }, ({ payload }) => {
       const t = resolvePath(payload.ref); if (!t) return;
-      if (glowEl) glowEl.classList.remove("lo-glow");
-      glowEl = t; t.classList.add("lo-glow"); showLive(true);
-      const r = t.getBoundingClientRect(), wrap = t.closest(".table-wrap");
-      const offX = wrap && (() => { const w = wrap.getBoundingClientRect(); return r.left < w.left || r.right > w.right; })();
-      if (following() && (r.top < 70 || r.bottom > innerHeight - 20 || offX)) t.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-      clearTimeout(glowTimer); glowTimer = setTimeout(() => t.classList.remove("lo-glow"), 6000);
+      showLive(true); glowAt(t, following());
     })
     .on("broadcast", { event: "group" }, ({ payload }) => { showLive(true); showGroup(payload, following()); })
     .on("broadcast", { event: "scroll" }, ({ payload }) => {
