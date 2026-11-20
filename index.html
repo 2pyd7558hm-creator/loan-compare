@@ -207,7 +207,7 @@ tbody tr:last-child td { border-bottom: 0 }
   <footer class="disclosure">
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
     <p><strong>For illustration only.</strong> This is not a loan offer, a commitment to lend, or a Loan Estimate. Figures are estimates based on the inputs shown. Actual rates, APRs, fees and payments depend on credit, property, loan amount, occupancy and market conditions, and are subject to underwriting approval. Rates can change daily.</p>
-    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%, VA funding fee 2.15% first use) as finance charges. Conventional PMI is shown until the balance reaches 78% of the purchase price. FHA annual MIP is shown for the life of the loan with less than 10% down, or 11 years otherwise. Cash to close shows down payment, points and lender fees only and excludes third-party costs, prepaids and escrow deposits. Taxes and insurance are estimates.</p>
+    <p>APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%; VA funding fee for first use, 2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) as finance charges. Conventional PMI is an estimate and is shown until the balance reaches 78% of the purchase price. FHA annual MIP follows HUD's current table (Mortgagee Letter 2023-05) and is shown for 11 years with 10% or more down, otherwise for the life of the loan. Cash to close shows down payment, points and lender fees only and excludes third-party costs, prepaids and escrow deposits. Taxes and insurance are estimates.</p>
 <p class="ehl"><svg viewBox="0 0 64 64" width="34" height="34" role="img" aria-label="Equal Housing Lender"><path d="M32 4 2 26h8v32h44V26h8L32 4z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="19" y="30" width="26" height="6" fill="currentColor"/><rect x="19" y="42" width="26" height="6" fill="currentColor"/></svg><span>EQUAL HOUSING<br>LENDER</span></p>
     <p id="brandFoot"></p>
     <p class="links"><a href="https://www.nmlsconsumeraccess.org/" target="_blank" rel="noopener">NMLS Consumer Access</a> · <a href="https://bit.ly/TexasRecoveryFundNotice" target="_blank" rel="noopener">Texas Recovery Fund Notice</a> · <a href="https://www.thatmortgagecouple.com/legal" target="_blank" rel="noopener">Legal</a> · <a href="https://www.thatmortgagecouple.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></p>
@@ -241,17 +241,32 @@ const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValu
 const MONTHS = 360;
 
 /* ---------- Finance math ---------- */
+// FHA annual MIP from HUD Mortgagee Letter 2023-05 (case numbers from March 20, 2023). LTV uses the base loan (before upfront MIP).
+// Returns the annual rate in % and how many years it is charged (11 years at 90% LTV or less, otherwise the life of the loan).
+function fhaMip(baseLoan, value, termYrs) {
+  const ltv = value > 0 ? baseLoan / value : 1, big = baseLoan > 726200;
+  let rate;
+  if (termYrs > 15) rate = big ? (ltv > 0.95 ? 0.75 : 0.70) : (ltv > 0.95 ? 0.55 : 0.50);
+  else rate = big ? (ltv > 0.90 ? 0.65 : ltv > 0.78 ? 0.40 : 0.15) : (ltv > 0.90 ? 0.40 : 0.15);
+  return { rate, years: ltv <= 0.90 ? 11 : termYrs };
+}
+// VA funding fee for a purchase, first use, by down payment (va.gov, effective April 7, 2023). Subsequent use under 5% down is 3.3%.
+function vaFee(downPct) { return downPct >= 10 ? 1.25 : downPct >= 5 ? 1.5 : 2.15; }
+// Starting PMI rate for conventional loans (borrower-paid monthly, good credit). An estimate the loan officer can change on the card.
+function convPmi(downPct, termYrs) { return downPct >= 20 ? 0 : termYrs <= 15 ? 0.3 : downPct < 5 ? 0.62 : downPct < 10 ? 0.55 : downPct < 15 ? 0.45 : 0.3; }
+
 function analyze(s) {
   const value = state.price;
   const down = value * s.downPct / 100;
   const base = Math.max(value - down, 0);
-  const financed = s.type === "fha" ? base * 0.0175 : s.type === "va" ? base * 0.0215 : 0;
+  const fha = s.type === "fha" ? fhaMip(base, value, s.term) : null;
+  const financed = fha ? base * 0.0175 : s.type === "va" ? base * vaFee(s.downPct) / 100 : 0;
   const loan = base + financed;
   const n = s.term * 12, r = s.rate / 1200;
   const pi = loan === 0 ? 0 : r ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n;
   const pointsCost = loan * s.points / 100;
   const upfront = pointsCost + s.fees + financed;
-  const miMonths = s.type === "fha" ? (s.downPct < 10 ? n : 132) : n;
+  const miMonths = fha ? Math.min(n, fha.years * 12) : n;
 
   const bal = [loan], cost = [upfront], equity = [value - loan], pay = [];
   let b = loan, cumInt = 0, cumMI = 0, firstMI = null;
@@ -260,7 +275,7 @@ function analyze(s) {
     if (m <= n && b > 0.005) {
       interest = b * r;
       if (s.type === "conv" && s.downPct < 20 && b / value > 0.78) mi = base * s.mi / 1200;
-      if (s.type === "fha" && m <= miMonths) mi = b * s.mi / 1200;
+      if (fha && m <= miMonths) mi = b * fha.rate / 1200;
       p = Math.min(pi - interest, b);
       b -= p;
     }
@@ -323,10 +338,23 @@ function renderCards() {
         ${field("Points", "points", i, s, { suf: "%", step: 0.125 })}
         ${field("Lender fees", "fees", i, s, { pre: "$", step: 50 })}
         ${field("Down payment", "downPct", i, s, { suf: "%", step: 0.5 })}
-        ${s.type === "va" ? "" : field(s.type === "fha" ? "Annual MIP" : "PMI rate / yr", "mi", i, s, { suf: "%", step: 0.05 })}
+        ${field(s.type === "fha" ? "Annual MIP (HUD)" : s.type === "va" ? "VA funding fee" : "PMI rate / yr", "mi", i, s, { suf: "%", step: 0.05 })}
       </div>
     </div>`).join("");
   $("cards").innerHTML = html + (state.scenarios.length < 4 ? `<button class="add" id="addBtn">+ Add an option</button>` : "");
+  state.scenarios.forEach((s, i) => syncMI(i));
+}
+// Conventional PMI isn't charged at 20% down or more: show the field as $0 (the rate is kept in case the down payment drops again).
+// FHA MIP and the VA funding fee come from the published tables, so their fields are read only and follow the down payment, term and price.
+function syncMI(i) {
+  const s = state.scenarios[i], el = document.getElementById(`s${i}-mi`); if (!el) return;
+  const base = Math.max(state.price * (1 - s.downPct / 100), 0);
+  let label, val, locked;
+  if (s.type === "fha") { const f = fhaMip(base, state.price, s.term); label = `Annual MIP (HUD, ${f.years === 11 ? "11 yrs" : "life of loan"})`; val = f.rate; locked = true; }
+  else if (s.type === "va") { label = "VA funding fee (first use)"; val = vaFee(s.downPct); locked = true; }
+  else { const none = s.downPct >= 20; label = none ? "PMI (none at 20% down)" : "PMI rate / yr"; val = none ? 0 : s.mi; locked = none; }
+  el.disabled = locked; el.value = val;
+  const lbl = el.closest("label"); if (lbl && lbl.firstChild && lbl.firstChild.nodeType === 3) lbl.firstChild.textContent = label;
 }
 
 $("cards").addEventListener("input", (e) => {
@@ -336,12 +364,14 @@ $("cards").addEventListener("input", (e) => {
   if (k === "name") s[k] = t.value;
   else if (k === "type") {
     s.type = t.value;
-    if (s.type === "fha") { s.mi = 0.55; if (s.downPct < 3.5) s.downPct = 3.5; }
-    if (s.type === "conv") s.mi = 0.45;
+    if (s.type === "fha" && s.downPct < 3.5) s.downPct = 3.5;
+    if (s.type === "conv") s.mi = convPmi(s.downPct, s.term);
     renderCards();
   }
   else if (k === "term") s.term = +t.value;
+  else if (k === "mi" && t.disabled) return;
   else s[k] = +t.value || 0;
+  if (k === "downPct" || k === "term") syncMI(+i);
   render();
 });
 $("cards").addEventListener("click", (e) => {
@@ -390,6 +420,7 @@ function lineChart(el, series, marker) {
 
 /* ---------- Render ---------- */
 function render() {
+  state.scenarios.forEach((s, i) => { if (s.type !== "conv") syncMI(i); });
   const res = state.scenarios.map(analyze);
   const h = state.horizon * 12;
   const base = res[0];

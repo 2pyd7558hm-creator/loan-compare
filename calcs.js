@@ -53,7 +53,6 @@ function wireCalc(sec, data, compute, changed) {
     const val = t.type === "checkbox" ? t.checked : t.tagName === "SELECT" || t.type === "text" ? t.value : (t.value === "" ? 0 : +t.value);
     if (t.dataset.row !== undefined) { data[t.dataset.list][+t.dataset.row][k] = val; compute(); changed(); return; }
     data[k] = val;
-    if (k === "program") { data.mi = data.program === "va" ? 0 : 0.55; const mi = sec.querySelector('[data-k="mi"]'); if (mi) mi.value = data.mi; }
     sync(); compute(); changed();
   };
   sec.onclick = (e) => {
@@ -237,12 +236,27 @@ const RVB = {
 };
 
 /* ---------- Affordability (math from the website calculator) with a rate ladder ---------- */
-// Program rules: minimum down and how mortgage insurance applies (conventional MI drops at 80% LTV; FHA adds 1.75% upfront MIP)
+// Program rules: minimum down and how mortgage insurance applies (conventional MI drops at 80% LTV; FHA adds 1.75% upfront MIP and
+// annual MIP from HUD's table; VA adds the funding fee for the down payment). fhaMip and vaFee live in workspace.html.
 const AFF_PROGRAMS = { conv: { minDown: 0.03, miUntilLtv: 0.80, upfront: 0 }, fha: { minDown: 0.035, miUntilLtv: 0, upfront: 0.0175 }, va: { minDown: 0, miUntilLtv: -1, upfront: 0 } };
 function affSolve(d, rateOverride) {
-  const prog = AFF_PROGRAMS[d.program] || AFF_PROGRAMS.conv;
+  // FHA's MIP and VA's fee depend on the down payment share, which depends on the price: solve, then re-solve with the rate the price lands on
+  if (d.program === "fha" || d.program === "va") {
+    let r = affSolveAt(d, rateOverride, d.program === "fha" ? 0.55 : 0, d.program === "va" ? 0.0215 : 0.0175);
+    for (let k = 0; k < 3; k++) {
+      const dp = r.price > 0 ? r.down / r.price * 100 : 0;
+      const mi = d.program === "fha" ? fhaMip(Math.max(0, r.price - r.down), r.price, d.term).rate : 0, up = d.program === "va" ? vaFee(dp) / 100 : 0.0175;
+      if (mi === r.miRate && up === r.upfront) break;
+      r = affSolveAt(d, rateOverride, mi, up);
+    }
+    return r;
+  }
+  return affSolveAt(d, rateOverride, +d.mi || 0, 0);
+}
+function affSolveAt(d, rateOverride, miPct, upfront) {
+  const prog = { ...(AFF_PROGRAMS[d.program] || AFF_PROGRAMS.conv), upfront };
   const rate = (rateOverride ?? d.rate) / 1200, n = Math.max(1, d.term) * 12;
-  const dti = d.dti / 100, tax = d.taxRate / 100, ins = +d.ins || 0, hoa = +d.hoa || 0, miRate = d.mi / 100, down = +d.down || 0, debts = +d.debts || 0;
+  const dti = d.dti / 100, tax = d.taxRate / 100, ins = +d.ins || 0, hoa = +d.hoa || 0, miRate = miPct / 100, down = +d.down || 0, debts = +d.debts || 0;
   const f = rate > 0 ? rate / (1 - Math.pow(1 + rate, -n)) : 1 / n;
   const budget = d.income / 12 * dti - debts - ins - hoa;
   const priceFor = (withMi) => { const k = (f + (withMi ? miRate / 12 : 0)) * (1 + prog.upfront); return (budget + down * k) / (k + tax / 12); };
@@ -254,13 +268,13 @@ function affSolve(d, rateOverride) {
   price = Math.max(0, price);
   const loan = Math.max(0, price - down) * (1 + prog.upfront);
   const pi = loan * f, tx = price * tax / 12, mi = hasMi ? loan * miRate / 12 : 0, total = pi + tx + ins + mi + hoa;
-  return { price, loan, pi, tx, ins, mi, hoa, total, down, dtiOut: d.income > 0 ? (total + debts) / (d.income / 12) : 0, cc: price * d.cc / 100, pp: price * d.pp / 100 };
+  return { price, loan, pi, tx, ins, mi, hoa, total, down, miRate: miPct, upfront, dtiOut: d.income > 0 ? (total + debts) / (d.income / 12) : 0, cc: price * d.cc / 100, pp: price * d.pp / 100 };
 }
 const AFF = {
   label: "Affordability", tag: "Affordability",
   title: () => "How much home you can afford",
   intro: () => "Starts from income, monthly debts and the cash you have for a down payment, and works out the price that keeps your total debt payments at the target share of income.",
-  note: "Affordability uses the debt-to-income target shown. Conventional mortgage insurance applies above 80% loan-to-value; FHA adds a 1.75% upfront premium to the loan and annual MIP. Closing costs and prepaids are estimated as a percent of price.",
+  note: "Affordability uses the debt-to-income target shown. Conventional mortgage insurance is an estimate and applies above 80% loan-to-value; FHA adds a 1.75% upfront premium to the loan and annual MIP from HUD's current table; VA adds the funding fee for first use (2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) to the loan. Closing costs and prepaids are estimated as a percent of price.",
   blank: (b) => ({ income: 95000, debts: 500, down: b.price ? Math.round(b.price * (b.downPct ?? 5) / 100) : 25000, program: "conv", rate: b.rate || 6.5, term: 30,
     dti: 36, taxRate: b.price && b.taxes ? +(b.taxes / b.price * 100).toFixed(2) : 0.55, ins: b.insurance ? Math.round(b.insurance / 12) : 150, hoa: b.hoa || 0, mi: 0.55, cc: 3, pp: 1.5, realtor: "" }),
   mount(sec, d, changed) {
@@ -277,7 +291,7 @@ const AFF = {
         ${numIn("Property tax rate", "taxRate", d, { suf: "% / yr", step: 0.05 })}
         ${numIn("Home insurance / mo", "ins", d, { pre: "$", step: 10 })}
         ${numIn("HOA dues / mo", "hoa", d, { pre: "$", step: 10 })}
-        ${numIn("Mortgage insurance", "mi", d, { suf: "% / yr", step: 0.05 })}
+        ${numIn("PMI rate", "mi", d, { suf: "% / yr", step: 0.05 }).replace('<label class="f"', '<label class="f" data-show="program=conv"')}
         ${numIn("Closing costs", "cc", d, { suf: "% of price", step: 0.25 })}
         ${numIn("Prepaids &amp; escrows", "pp", d, { suf: "% of price", step: 0.25 })}
         <label class="f wide staff-only">Realtor partner shown on this tab (optional)<input type="text" data-k="realtor" value="${esc(d.realtor)}" placeholder="e.g. Jane Doe, Modern Real Estate"></label>
@@ -295,9 +309,9 @@ const AFF = {
         hlBox("Homes up to", usd.format(s.price), `<span class="pill ${d.dti <= 36 ? "" : "warn"}">${dtiTxt}</span> at ${pct(+d.dti, 1)} debt-to-income`, "good") +
         hlBox("Total monthly payment", usd.format(s.total), `at ${pct(+d.rate)}`) +
         hlBox("Estimated cash to close", usd.format(s.down + s.cc + s.pp), "down payment, closing costs, prepaids") +
-        hlBox("Loan amount", usd.format(s.loan), s.price ? pct(s.down / s.price * 100, 1) + " down" : "");
+        hlBox("Loan amount", usd.format(s.loan), (s.price ? pct(s.down / s.price * 100, 1) + " down" : "") + (s.upfront ? `, includes ${usd.format(s.loan - Math.max(0, s.price - s.down))} ${d.program === "va" ? "VA funding fee" : "FHA upfront MIP"}` : ""));
       const rows = (list) => `<div class="rows">${list.map(([k, v, cls]) => `<div class="row ${cls || ""}"><span>${k}</span><span>${v}</span></div>`).join("")}</div>`;
-      sec.querySelector("#affPay").innerHTML = rows([["Principal &amp; interest", usd.format(s.pi)], ["Property taxes", usd.format(s.tx)], ["Home insurance", usd.format(s.ins)], ["Mortgage insurance", usd.format(s.mi)], ["HOA dues", usd.format(s.hoa)], ["Total", usd.format(s.total), "total"], ["Debt-to-income with this home", pct(s.dtiOut * 100, 1)]]);
+      sec.querySelector("#affPay").innerHTML = rows([["Principal &amp; interest", usd.format(s.pi)], ["Property taxes", usd.format(s.tx)], ["Home insurance", usd.format(s.ins)], [d.program === "fha" ? `FHA MIP (${pct(s.miRate, 2)} / yr)` : "Mortgage insurance", d.program === "va" ? "None (VA)" : usd.format(s.mi)], ["HOA dues", usd.format(s.hoa)], ["Total", usd.format(s.total), "total"], ["Debt-to-income with this home", pct(s.dtiOut * 100, 1)]]);
       sec.querySelector("#affCash").innerHTML = rows([["Down payment", usd.format(s.down)], ["Closing costs", usd.format(s.cc)], ["Prepaids &amp; escrows", usd.format(s.pp)], ["Estimated cash to close", usd.format(s.down + s.cc + s.pp), "total"]]);
       const base = +d.rate, steps = [-1, -0.5, 0, 0.5, 1].map((x) => +(base + x).toFixed(3)).filter((x) => x > 0);
       const lad = steps.map((r) => ({ r, s: affSolve(d, r) })), sameLoanPay = (r) => s.loan * (r > 0 ? (r / 1200) / (1 - Math.pow(1 + r / 1200, -d.term * 12)) : 1 / (d.term * 12));
