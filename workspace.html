@@ -361,7 +361,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
             <div class="share-row" id="shareRow" hidden>
               <input id="shareUrl" readonly aria-label="Client link">
               <button class="btn" id="copyBtn" type="button">Copy link</button>
-              <button class="btn" id="mailBtn" type="button">Email link</button>
+              <button class="btn" id="msgBtn" type="button" title="Copies a short note with the link, to paste into an email, text or Messages">Copy message</button>
             </div>
             <div class="present-row" id="presentRow" hidden>
               <button class="btn" id="presentBtn" type="button">Present live</button>
@@ -1544,16 +1544,31 @@ $("delBtn").addEventListener("click", () => { $("delConfirm").hidden = false; })
 $("delNo").addEventListener("click", () => { $("delConfirm").hidden = true; });
 $("delYes").addEventListener("click", del);
 $("shareOn").addEventListener("change", (e) => setShared(e.target.checked));
-// Email link: opens your own email app, addressed to every client email (commas, semicolons or spaces between them)
-const splitEmails = (v) => (v || "").split(/[\s,;:]+/).map((x) => x.trim()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
-$("mailBtn").addEventListener("click", () => {
-  const to = splitEmails($("cEmail").value);
-  const first = ($("cName").value.trim().split(/\s+/)[0]) || "there";
-  const onlyCompare = file.calcs.filter(isShared).every((c) => c.kind === "compare");
-  const subject = (onlyCompare ? "Your loan comparison" : "Your home loan numbers") + ($("cTitle").value.trim() ? " – " + $("cTitle").value.trim() : "");
-  const body = `Hi ${first},\n\n${onlyCompare ? "Here are the loan options we talked about." : "Here are the numbers we went over."} You can open them any time with this private link:\n${$("shareUrl").value}\n\nLet me know if you have any questions.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}`;
-  location.href = "mailto:" + to.map(encodeURIComponent).join(",") + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
-  if (!to.length) say("saveStatus", "No client email yet, so add the address in your email app.");
+// The note for the client. Copy message puts it on the clipboard to paste into Outlook, a text or Messages; nothing is sent from this page.
+// It's signed by whoever is signed in.
+function clientMessage() {
+  // Greet every borrower by first name: "Sam Ray" -> Sam; "Sam & Alex Ray" or "Sam Ray and Alex Jones" -> Sam and Alex; three -> Sam, Alex and Jo
+  const firsts = $("cName").value.split(/\s*(?:&|\+|\/|,|;|\band\b)\s*/i).map((x) => x.trim().split(/\s+/)[0]).filter(Boolean);
+  const join = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+  const hi = firsts.length ? join(firsts) : "there";
+  const shared = file.calcs.filter(isShared);
+  // Name each calculator the client can open, once each, in tab order: "the Loan Comparison and the Cost of Waiting"
+  const NAMES = { compare: "Loan Comparison", cow: "Cost of Waiting", rvb: "Rent vs Buy", aff: "Affordability", debt: "Debt Consolidation",
+    amort: "Extra Payments", arm: "ARM vs Fixed", equity: "Equity & Appreciation", invest: "Investment Property" };
+  const names = [...new Set(shared.map((c) => c.kind === "equity" && c.data && c.data.mode === "bid" ? "Bid Over Asking" : NAMES[c.kind]).filter(Boolean))].map((n) => "the " + n);
+  const see = names.length ? `You'll see ${join(names)}, which you can open any time with this private link:` : "You can open them any time with this private link:";
+  // Signed with name, brand and phone; the loan officer's own email signature adds the rest
+  const body = `Hi ${hi},\n\nHere are the numbers for us to review together. ${see}\n\n${$("shareUrl").value}\n\nLet's go over them together when you get a chance.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}`;
+  return { body };
+}
+$("msgBtn").addEventListener("click", async () => {
+  const { body } = clientMessage();
+  try { await navigator.clipboard.writeText(body); say("saveStatus", "Message copied. Paste it into an email, a text or Messages."); }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = body; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove();
+    say("saveStatus", ok ? "Message copied. Paste it into an email, a text or Messages." : "Couldn't copy here. Use Copy link instead.", !ok);
+  }
 });
 $("copyBtn").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("shareUrl").value); say("saveStatus", "Link copied."); }
