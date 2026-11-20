@@ -97,6 +97,53 @@ Ask ONE short question (kind "question"; fill draft with what you have) only whe
 Don't ask about rates, points, fees or anything the loan officer can easily fix on the cards. When the message says no more questions, always return a draft, using sensible defaults and listing them in assumptions.
 Otherwise return kind "draft" with question "".`;
 
+
+// ---- Chat mode: one turn of the workspace assistant. It sees the form as it is now and the recent conversation,
+// and answers with a short reply plus changes for the page to make. "Keep" values (-1, 0, "") leave a field as it is.
+const CALC_KINDS = ["none", "cow", "rvb", "aff", "debt", "amort", "arm", "equity", "invest", "cash"];
+const ACTION = {
+  type: "object", additionalProperties: false,
+  properties: {
+    op: { type: "string", enum: ["set_price", "set_location", "update_option", "add_option", "remove_option", "add_calc", "set_refi"] },
+    index: { type: "integer" },
+    type: { type: "string", enum: ["keep", "conv", "fha", "va", "jumbo"] },
+    term: N, arm: { type: "integer", enum: [-1, 0, 3, 5, 7, 10] }, rate: N, points: N, down_pct: N,
+    buydown: { type: "integer", enum: [-1, 0, 1, 2, 3] }, seller_credit: N,
+    value: N, state: S, county: S, calc: { type: "string", enum: CALC_KINDS }, flag: B,
+  },
+  required: ["op", "index", "type", "term", "arm", "rate", "points", "down_pct", "buydown", "seller_credit", "value", "state", "county", "calc", "flag"],
+};
+const CHAT_SCHEMA = {
+  type: "object", additionalProperties: false,
+  properties: {
+    reply: S,
+    actions: { type: "array", items: ACTION },
+    suggest_calc: { type: "string", enum: CALC_KINDS },
+    suggest_text: S,
+  },
+  required: ["reply", "actions", "suggest_calc", "suggest_text"],
+};
+const CHAT_SYSTEM = `You are the assistant inside a mortgage loan officer's loan comparison workspace (That Mortgage Couple). The loan officer types to you; you change the form for them and keep the conversation going. The client's name and street address are replaced with "Client A" and "[street address]".
+
+Each turn you get the FORM as it is right now (JSON), the recent CONVERSATION, and the loan officer's NEW MESSAGE. Read the new message in light of the conversation: if your last message asked a question, the new message is usually the answer to it.
+
+Return:
+- reply: one to three short, friendly sentences in plain English saying what you changed, or answering the question. If something important is still missing, ask ONE question at the end (for example: "No rate yet for option B. What's your rate, or should I keep my estimate?"). Don't use jargon or markdown.
+- actions: the changes to make, in order. Use only what the message asks for or clearly implies:
+  - set_price: value = purchase price or home value in dollars.
+  - set_location: state (two letters) and/or county (without the word County). Use "" for a part you aren't changing.
+  - update_option: index = the option's number from FORM.options (0 for A, 1 for B...). Set only the fields that change; leave the rest as keep: type "keep", term 0, arm -1, rate 0, points -1, down_pct -1, buydown -1, seller_credit -1. ("Make B 20% down" = update_option index 1, down_pct 20.)
+  - add_option: a new loan option (up to 4 total). Same fields; anything left as keep is copied from option A, and a missing rate is estimated by the page.
+  - remove_option: index of the option to remove.
+  - add_calc: calc = one of cow (cost of waiting), rvb (rent vs buy; value = monthly rent if known), aff (affordability; value = yearly income if known), debt (debt consolidation), amort (extra payments; value = extra dollars a month if known), arm (ARM vs fixed), equity (equity and appreciation), invest (investment property), cash (cost of paying cash). Don't add a calculator that's already in FORM.tabs.
+  - set_refi: flag true for a refinance, false for a purchase.
+  For every action, fill fields you don't use with the keep values above, index -1, value 0, state "", county "", calc "none", flag false.
+- suggest_calc / suggest_text: when no calculator was asked for this turn, you may suggest ONE calculator that isn't in FORM.tabs and would help this client, with a short yes/no question in suggest_text (for example after three or more options: amort, "Want to show how extra payments could pay one of these off faster?"; with an ARM: arm; with a small down payment or FHA: rvb; when cash or savings come up: cash). Otherwise suggest_calc "none" and suggest_text "". Don't suggest one the conversation shows the loan officer already turned down.
+
+Rates: never invent a rate in update_option or add_option; leave rate 0 unless the loan officer gave one. FORM.options[i].rate_estimated true means the page guessed it.
+Loan limits: a conventional loan over $832,750 (price minus down payment) may be high balance or jumbo depending on the county, so ask for the county when it's missing.
+If the message is a general mortgage question, answer it briefly in reply with no actions. If you can't tell what they want, ask one short question and make no changes.`;
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin"), headers = { ...cors(origin), "Content-Type": "application/json" };
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
@@ -115,8 +162,9 @@ Deno.serve(async (req) => {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) return reply({ error: "not_configured" }, 503);
 
-  let body: { note?: unknown; answers?: unknown; final?: unknown };
+  let body: { note?: unknown; answers?: unknown; final?: unknown; mode?: unknown; form?: unknown; history?: unknown };
   try { body = await req.json(); } catch { return reply({ error: "bad_json" }, 400); }
+  if (body.mode === "chat") return chatTurn(key, body, reply);
   const note = typeof body.note === "string" ? body.note.trim() : "";
   if (!note || note.length > 4000) return reply({ error: "bad_note" }, 400);
   const answers = Array.isArray(body.answers) ? body.answers.slice(0, 3) as { q?: string; a?: string }[] : [];
@@ -147,3 +195,35 @@ Deno.serve(async (req) => {
     return reply({ error: "ai_error" }, 502);
   }
 });
+
+// deno-lint-ignore no-explicit-any
+async function chatTurn(key: string, body: any, reply: (b: unknown, status?: number) => Response) {
+  const note = typeof body.note === "string" ? body.note.trim() : "";
+  if (!note || note.length > 4000) return reply({ error: "bad_note" }, 400);
+  const form = JSON.stringify(body.form ?? {}).slice(0, 6000);
+  const history = (Array.isArray(body.history) ? body.history.slice(-12) : [])
+    .map((m: { who?: string; text?: string }) => `${m.who === "u" ? "Loan officer" : "Assistant"}: ${String(m.text || "").slice(0, 600)}`).join("\n");
+  const content = `FORM:\n${form}\n\nCONVERSATION:\n${history || "(none yet)"}\n\nNEW MESSAGE:\n${note}`;
+  const client = new Anthropic({ apiKey: key });
+  try {
+    const msg = await client.beta.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 8000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "low", format: { type: "json_schema", schema: CHAT_SCHEMA } },
+      system: CHAT_SYSTEM,
+      messages: [{ role: "user", content }],
+    });
+    if (msg.stop_reason === "refusal" || msg.stop_reason === "max_tokens") return reply({ error: "no_answer" }, 502);
+    const text = msg.content.map((b) => b.type === "text" ? b.text : "").join("");
+    const out = JSON.parse(text);
+    out.actions = (Array.isArray(out.actions) ? out.actions : []).slice(0, 12);
+    return reply({ kind: "chat", ...out, usage: { input: msg.usage.input_tokens, output: msg.usage.output_tokens } });
+  } catch (e) {
+    if (e instanceof Anthropic.RateLimitError) return reply({ error: "busy" }, 429);
+    if (e instanceof Anthropic.AuthenticationError) return reply({ error: "bad_key" }, 503);
+    if (e instanceof Anthropic.APIError) return reply({ error: "ai_error", status: e.status, detail: String(e.message || "").slice(0, 300) }, 502);
+    return reply({ error: "ai_error" }, 502);
+  }
+}
