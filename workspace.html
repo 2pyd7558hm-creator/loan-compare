@@ -925,6 +925,35 @@ $("tplList").addEventListener("click", async (e) => {
 });
 
 /* ---- Quick draft: "Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA" ---- */
+// Loan options typed out in the quick draft, e.g. "no points vs 1.5 points" or "conv 5% down vs FHA 3.5% down"
+const OPT_WORD = /\b(conv|conventional|fha|va|points?|pts?|down|yr|year|years|fixed|rate|buy ?down)\b|\d\s*%/i;
+function optionSpecs(text) {
+  const pieces = text.split(/\s+(?:vs\.?|versus|compared (?:to|with))\s+/i);
+  let specs = [];
+  if (pieces.length > 1) {
+    pieces.forEach((pc, i) => { const cs = pc.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean); if (cs.length) specs.push(i === 0 ? cs[cs.length - 1] : cs[0]); });
+  } else {
+    specs = text.split(/[,;\n]+/).map((x) => x.trim()).filter((x) => OPT_WORD.test(x));
+  }
+  // "no points and 1.5 points" / "15 or 30 year" style lists
+  specs = specs.flatMap((sp) => { const sub = sp.split(/\s+(?:and|or|&)\s+|\s*\/\s*/i).map((x) => x.trim()).filter(Boolean); return sub.length > 1 && sub.every((x) => OPT_WORD.test(x)) ? sub : [sp]; });
+  return specs.filter((x) => OPT_WORD.test(x)).slice(0, 4);
+}
+function parseOption(sp, base) {
+  const low = sp.toLowerCase(), num = (re) => { const m = low.match(re); return m ? parseFloat(m[1]) : null; };
+  const type = /\bfha\b/.test(low) ? "fha" : /\bva\b/.test(low) ? "va" : "conv";
+  let points = /\b(no|zero|0)\s*(points?|pts?)\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/);
+  let down = /\b(no|zero)\s*down\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*%?\s*down\b/);
+  const term = num(/\b(10|15|20|25|30)\s*-?\s*(?:yr|year|years)\b/);
+  let rate = num(/(?:\b(?:rate|at)\b|@)\s*(\d+(?:\.\d+)?)\s*%?/) ?? num(/(\d+(?:\.\d+)?)\s*%(?!\s*down)/);
+  if (rate !== null && (rate < 1 || rate > 15)) rate = null;
+  const guessed = rate === null;
+  if (guessed) rate = base.rate - (type === "fha" ? 0.25 : type === "va" ? 0.375 : 0) - ((term || 30) <= 15 ? 0.5 : 0) - 0.25 * (points || 0);
+  if (down === null) down = type === "fha" ? 3.5 : type === "va" ? 0 : base.downPct;
+  const nm = sp.replace(/\s+/g, " ").trim();
+  return { guessed, s: { name: nm.charAt(0).toUpperCase() + nm.slice(1), type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, fees: base.fees, downPct: down,
+    mi: type === "fha" ? 0.55 : type === "va" ? 0 : (down < 5 ? 0.62 : down < 10 ? 0.55 : (term || 30) <= 15 ? 0.3 : 0.45) } };
+}
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 function quickDraft(text) {
   const parts = text.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
@@ -940,7 +969,7 @@ function quickDraft(text) {
     const up = p.toUpperCase().replace(/\./g, "");
     if (!st && US_STATES.includes(up) && up !== "VA") { st = up; continue; }
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
-    if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p)) { addr = p; continue; }
+    if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
     if (!name && /^[a-z][a-z .'&-]+$/i.test(p) && !/\b(conv|conventional|fha|va|vs|points?|down|refi|refinance|condo|year|yr)\b/i.test(p) && !US_STATES.includes(up)) name = p;
   }
   const refi = /\brefi(nance)?\b/.test(low), condo = /\bcondo\b/.test(low);
@@ -960,9 +989,21 @@ function quickDraft(text) {
     const pick = pool.find((t) => refi ? /refi/i.test(t.name) : condo ? /condo/i.test(t.name) : !/refi|condo/i.test(t.name)) || pool[0];
     if (pick) applyFeeTemplate(pick);
   }
-  applyPreset(preset);
-  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + $("preset").querySelector(`option[value="${preset}"]`).textContent];
-  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + ". Check the rates and pricing, then save.");
+  // Use the options exactly as typed when there are at least two; otherwise fall back to a common comparison
+  const specs = optionSpecs(text);
+  let optText, guessed = false;
+  if (specs.length >= 2) {
+    const base = { ...state.scenarios[0] };
+    const opts = specs.map((sp) => parseOption(sp, base));
+    guessed = opts.some((o) => o.guessed);
+    state.scenarios = opts.map((o) => o.s); renderCards(); render();
+    optText = opts.map((o) => o.s.name).join(" vs ");
+  } else {
+    applyPreset(preset);
+    optText = $("preset").querySelector(`option[value="${preset}"]`).textContent;
+  }
+  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText];
+  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
 }
 $("quickForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $("quickIn").value.trim(); if (v) { quickDraft(v); $("quickIn").value = ""; } });
 
