@@ -1548,8 +1548,15 @@ $("shareOn").addEventListener("change", (e) => setShared(e.target.checked));
 // It's signed by whoever is signed in.
 function clientMessage() {
   const first = ($("cName").value.trim().split(/\s+/)[0]) || "there";
-  const onlyCompare = file.calcs.filter(isShared).every((c) => c.kind === "compare");
-  const body = `Hi ${first},\n\n${onlyCompare ? "Here are the loan options we talked about." : "Here are the numbers we went over."} You can open them any time with this private link:\n${$("shareUrl").value}\n\nLet me know if you have any questions.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}${signedInEmail ? "\n" + signedInEmail : ""}`;
+  const shared = file.calcs.filter(isShared);
+  const onlyCompare = shared.every((c) => c.kind === "compare");
+  // Name each calculator the client can open, once each, in tab order: "the Loan Comparison and the Cost of Waiting"
+  const NAMES = { compare: "Loan Comparison", cow: "Cost of Waiting", rvb: "Rent vs Buy", aff: "Affordability", debt: "Debt Consolidation",
+    amort: "Extra Payments", arm: "ARM vs Fixed", equity: "Equity & Appreciation", invest: "Investment Property" };
+  const names = [...new Set(shared.map((c) => c.kind === "equity" && c.data && c.data.mode === "bid" ? "Bid Over Asking" : NAMES[c.kind]).filter(Boolean))].map((n) => "the " + n);
+  const list = names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + (names.length > 2 ? "," : "") + " and " + names[names.length - 1];
+  const see = list ? ` You'll see ${list} for you to review.` : "";
+  const body = `Hi ${first},\n\n${onlyCompare ? "Here are the loan options we talked about." : "Here are the numbers we went over."}${see} You can open them any time with this private link:\n${$("shareUrl").value}\n\nLet me know if you have any questions.\n\n${presenterName !== "Loan officer" ? presenterName + "\n" : ""}${BRAND.name}\n${BRAND.phone}${signedInEmail ? "\n" + signedInEmail : ""}`;
   return { body };
 }
 $("msgBtn").addEventListener("click", async () => {
