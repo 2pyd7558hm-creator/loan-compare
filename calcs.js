@@ -73,7 +73,7 @@ const COW = {
   note: "Cost of waiting assumes home values grow at the rate shown each year and that property taxes grow with the home's value. Refinance figures compare principal and interest only and leave out closing costs, which you'd pay either way.",
   blank: (b) => ({ mode: "purchase", st: b.st || DEFAULT_STATE, apprSrc: DEFAULT_SRC, appr: 3,
     price: b.price || 450000, downPct: b.downPct ?? 5, rate: b.rate || 6.5, rateLater: b.rate || 6.5, term: 30,
-    taxes: b.taxes ?? 5400, insurance: b.insurance ?? 1500, hoa: b.hoa || 0, mi: 0.55, months: 12, years: 5,
+    taxes: b.taxes ?? 5400, insurance: b.insurance ?? 1500, hoa: b.hoa || 0, mi: b.mi ?? 0.55, months: 12, years: 5,
     curBal: 400000, curRate: 7.5, curYears: 28, newAmt: 400000, newTerm: 30, rateNow: b.rate || 6.25, rateHope: (b.rate || 6.25) - 0.5, wait: 12 }),
   mount(sec, d, changed) {
     const purchase = d.mode !== "refi";
@@ -167,7 +167,7 @@ const RVB = {
   note: "Rent vs buy counts the down payment, closing costs, principal and interest, mortgage insurance, taxes, insurance, HOA and upkeep, minus home equity (estimated value less loan balance). Taxes, insurance and upkeep grow with the home's value. It leaves out selling costs, tax deductions, and investment returns on cash not used for the down payment.",
   blank: (b) => ({ st: b.st || DEFAULT_STATE, apprSrc: DEFAULT_SRC, appr: 3, rent: b.rent || 2400, rentGrowth: 3,
     price: b.price || 450000, downPct: b.downPct ?? 5, rate: b.rate || 6.5, term: 30, taxes: b.taxes ?? 5400, insurance: b.insurance ?? 1500,
-    hoa: b.hoa || 0, mi: 0.55, closingPct: 3, maint: 1, years: 7 }),
+    hoa: b.hoa || 0, mi: b.mi ?? 0.55, closingPct: 3, maint: 1, years: 7 }),
   mount(sec, d, changed) {
     sec.innerHTML = `
       <div class="calc-head"><h2>Rent and home</h2></div>
@@ -277,7 +277,7 @@ const AFF = {
   intro: () => "Starts from income, monthly debts and the cash you have for a down payment, and works out the price that keeps your total debt payments at the target share of income.",
   note: "Affordability uses the debt-to-income target shown. Conventional mortgage insurance is an estimate and applies above 80% loan-to-value; FHA adds a 1.75% upfront premium to the loan and annual MIP from HUD's current table; VA adds the funding fee for first use (2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) to the loan. Closing costs and prepaids are estimated as a percent of price.",
   blank: (b) => ({ income: 95000, debts: 500, down: b.price ? Math.round(b.price * (b.downPct ?? 5) / 100) : 25000, program: "conv", rate: b.rate || 6.5, term: 30,
-    dti: 36, taxRate: b.price && b.taxes ? +(b.taxes / b.price * 100).toFixed(2) : 0.55, ins: b.insurance ? Math.round(b.insurance / 12) : 150, hoa: b.hoa || 0, mi: 0.55, cc: 3, pp: 1.5, realtor: "" }),
+    dti: 36, taxRate: b.price && b.taxes ? +(b.taxes / b.price * 100).toFixed(2) : 0.55, ins: b.insurance ? Math.round(b.insurance / 12) : 150, hoa: b.hoa || 0, mi: b.mi ?? 0.55, cc: 3, pp: 1.5, realtor: "" }),
   mount(sec, d, changed) {
     sec.innerHTML = `
       <div class="calc-head"><h2>Income and savings</h2></div>
