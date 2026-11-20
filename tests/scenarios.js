@@ -25,7 +25,7 @@
     C("Tony Stark 2.5M Pitkin County CO 25% down jumbo 30 yr 6.875", { name: "Tony Stark", price: 2500000, county: "Pitkin", opts: [o("jumbo", 30, 6.875, 25)] }),
     C("jim beam 450 co conv 5 dn 6.5 vs fha 3.5 dn 6.25", { name: /jim beam/i, price: 450000, opts: [o("conv", 30, 6.5, 5), o("fha", 30, 6.25, 3.5)] }),
     C("Sam Wilson, purcahse price 520,000, Lakewood CO, conventinal 10% down 30 year fixd 6.625 vs FHA 3.5 percent down 6.125", { name: "Sam Wilson", price: 520000, opts: [o("conv", 30, 6.625, 10), o("fha", 30, 6.125, 3.5)] }),
-    C("Hi, we're looking at a $480,000 house in Fort Collins, Colorado. We have about 5% to put down. What would our payment be with a 30 year fixed vs FHA?", { name: "", price: 480000, st: "CO", opts: [o("conv", 30, null, 5), o("fha", 30, null, 3.5)] }),
+    C("Hi, we're looking at a $480,000 house in Fort Collins, Colorado. We have about 5% to put down. What would our payment be with a 30 year fixed vs FHA?", { name: "", price: 480000, st: "CO", opts: [o("conv", 30, null, 5), o("fha", 30, null, 5)] }),
     C("My wife and I make about 140k a year and want to know how much house we can afford in Denver with 10% down", { name: "", calcs: ["aff"], data: { aff: { income: 140000 } } }),
     C("Compare 15 vs 30 year for a $350k condo in Littleton CO, 20% down, rates 5.875 and 6.5", { price: 350000, opts: [o("conv", 15, 5.875, 20), o("conv", 30, 6.5, 20)] }),
     C("Lucy Liu 700k CO, 10% down: 30yr 6.875, 20yr 6.5, 15yr 6.125, 10/6 ARM 6.0", { name: "Lucy Liu", price: 700000, opts: [o("conv", 30, 6.875, 10), o("conv", 20, 6.5, 10), o("conv", 15, 6.125, 10), o("conv", 30, 6, 10, { arm: 10 })] }),
@@ -116,7 +116,8 @@
     window.tmcResults = window.tmcResults || [];
     // keep each AI reply, so the same answers can be replayed offline without spending
     window.tmcAi = window.tmcAi || [];
-    if (!sb.functions.__tmc) { const inv = sb.functions.invoke.bind(sb.functions); sb.functions.invoke = async (name, opts) => { const r = await inv(name, opts); window.tmcAi.push({ case: window.tmcCase, body: opts && opts.body, data: r && r.data }); return r; }; sb.functions.__tmc = true; }
+    const FP = Object.getPrototypeOf(sb.functions);
+    if (!FP.__tmc) { const inv = FP.invoke; FP.invoke = async function (name, opts) { const r = await inv.call(this, name, opts); window.tmcAi.push({ case: window.tmcCase, body: opts && opts.body, data: r && r.data }); return r; }; FP.__tmc = true; }
     for (let n = from; n < to; n++) {
       const c = window.TMC_CASES[n]; window.tmcCase = n;
       try {

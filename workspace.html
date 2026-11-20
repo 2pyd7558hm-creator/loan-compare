@@ -1127,7 +1127,7 @@ function applyPreset(kind) {
   const r = +a.rate || 6.75, fees = a.fees, down = a.downPct;
   const conv = (o) => ({ type: "conv", term: 30, rate: r, points: 0, fees, downPct: down, mi: 0.45, ...o });
   const P = {
-    starter: [conv({ name: "Conventional, 3% down", downPct: 3, mi: 0.62 }), conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }],
+    starter: [conv({ name: "Conventional, 3% down", downPct: 3, mi: 0.45 }), conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }],
     down: [conv({ name: "5% down", downPct: 5, mi: 0.55 }), conv({ name: "10% down", downPct: 10, mi: 0.45 }), conv({ name: "20% down, no PMI", downPct: 20, rate: +(r - 0.125).toFixed(3) })],
     points: [conv({ name: "No points" }), conv({ name: "1 point", points: 1, rate: +(r - 0.25).toFixed(3) }), conv({ name: "2 points", points: 2, rate: +(r - 0.5).toFixed(3) })],
     convfha: [conv({ name: "Conventional, 5% down", downPct: 5, mi: 0.55 }), { name: "FHA, 3.5% down", type: "fha", term: 30, rate: +(r - 0.25).toFixed(3), points: 0, fees, downPct: 3.5, mi: 0.55 }],
@@ -1481,7 +1481,7 @@ function parseOption(sp, base) {
     mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
 // Words that end a client's name in a note
-const NAME_STOP = /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|purchasing|buy|buying|home|house|property|loans?|price|scenarios?|options?|compare|comparison|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash|seller|credit|dpa|add|can|could|we|please|also|with|new|wants?|needs?|looking|is|are|has|the|a|an|to|of|in|what|if|they|their|them|he|she|his|her|it|its|i|you|did|do|does|how|about|show|me|make|change|swap|switch|try|use|let'?s|would|should|could|instead|actually|maybe|yes|no|ok|okay|sure|thanks|on|for|from|at|by|but|so|then|that|this|these|those|one|ones|both|all)$/i;
+const NAME_STOP = /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|purchasing|buy|buying|home|house|property|loans?|price|scenarios?|options?|compare|comparison|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash|seller|credit|dpa|add|can|could|we|please|also|with|new|wants?|needs?|looking|is|are|has|the|a|an|to|of|in|what|if|they|their|them|he|she|his|her|it|its|i|you|did|do|does|how|about|show|me|make|change|swap|switch|try|use|let'?s|would|should|could|instead|actually|maybe|yes|no|ok|okay|sure|thanks|on|for|from|at|by|but|so|then|that|this|these|those|one|ones|both|all|hi|hello|hey|my|our|wife|husband|we're|were|i'm|im)$/i;
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 // The client, price, state and extras in a note, read by the typed rules (also used to strip names before the AI reader)
 const STATE_WORDS = /^(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|ohio|oklahoma|oregon|pennsylvania|tennessee|texas|utah|vermont|virginia|washington|wisconsin|wyoming|new|north|south|west|rhode|county|city|springs)$/i;
@@ -1521,7 +1521,7 @@ function noteBasics(text) {
   const xy = text.match(/\b(\d+|one|two|three|four)\s+extra\s+(?:monthly\s+)?payments?\s+(?:a|per|each|every)\s+year/i);
   const xm = text.match(/\$\s*(\d[\d,]*)\s*(?:extra\s+)?(?:a|per|each|every)\s+month|\bextra\s+\$?\s*(\d[\d,]*)\s*(?:a|per|each|every)\s+month/i);
   const extraYearN = xy ? (NUMW[xy[1].toLowerCase()] || +xy[1]) : null, extraMonth = xm ? +(xm[1] || xm[2]).replace(/,/g, "") : null;
-  const textP = text.replace(RENT_RE, " ").replace(INC_RE, " ").replace(STREET_RE, " ");
+  const textP = text.replace(RENT_RE, " ").replace(INC_RE, " ").replace(STREET_RE, " ").replace(/\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\b/g, "$1").replace(/\b\d{1,3}\s*(?:credit\s*)?(?:score|fico)\b|\b(?:score|fico)\s*(?:of|is)?\s*\d{3}\b/gi, " ");
   const m = textP.match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d+)?\s*(k|m)?\b|\$\s*(\d+(?:\.\d+)?)\s*(k|m)\b|\b(\d+(?:\.\d+)?)\s*(k|m)\b/i);
   if (m) {
     const num = parseFloat((m[1] || m[3] || m[5]).replace(/,/g, "")), unit = (m[2] || m[4] || m[6] || "").toLowerCase();
@@ -1531,7 +1531,9 @@ function noteBasics(text) {
   name = cueName(text);
   for (const p of parts) {
     const up = p.toUpperCase().replace(/\./g, "");
-    if (!st && US_STATES.includes(up) && up !== "VA") { st = up; continue; }
+    // "hi", "in", "me", "or", "ok" are words too: count those as states only when typed in capitals
+    const capsOk = p === p.toUpperCase() || !/^(HI|IN|ME|OR|OK|OH|ID|PA|MA|AL|LA|DE|MO|MS|NE|CT)$/.test(up);
+    if (!st && capsOk && US_STATES.includes(up) && up !== "VA") { st = up; continue; }
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
     // a street address starts with a number, but "700 score", "2 extra payments" or "3000 rent" aren't addresses
     if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p) && !/\b(score|fico|credit|mid|extra|payments?|rent|income|months?|days?|units?|beds?|baths?|kids?|years?|people)\b/i.test(p)) { addr = p; continue; }
@@ -1783,7 +1785,7 @@ function asAskPrice() {
 function asAskCounty() {
   asSay(`At least one loan is over the ${usd.format(CLL_BASE)} conforming limit. Which county and state is the home in? That decides high balance or jumbo.`, [{ label: "Skip", fn: asNext }], { kind: "county", answer: (t) => {
     const b = noteBasics(t), st = b.st || file.st || null;
-    const raw = t.replace(/,?\s*\b[A-Z]{2}\b\.?\s*$/, "").replace(/\s+county\b.*$/i, "").replace(/,.*$/, "").trim();
+    const raw = t.replace(/,?\s*\b[A-Z]{2}\b\.?\s*$/, "").replace(/\s+county\b.*$/i, "").replace(/,.*$/, "").replace(/^\s*(?:it'?s|it is|they'?re|that'?s|the county is|county is|in|located in|the home is in)\s+(?:in\s+)?/i, "").replace(/^(?:in)\s+/i, "").trim();
     const known = st && Object.keys(CLL_HIGH[st] || {}).find((c) => c.toLowerCase() === raw.toLowerCase());
     const county = known || raw.replace(/\b\w/g, (x) => x.toUpperCase());
     if (!county || !toCompare()) { asSay("I didn't catch a county, so I left the loans as they are."); return asNext(); }
@@ -1928,7 +1930,7 @@ async function asChat(v) {
   $("quickBtn").disabled = true; asSay("Thinking…");
   let res = null;
   try {
-    const r = await sb.functions.invoke("draft-reader", { body: { mode: "chat", note: strip(v), form: formForAi(), history } });
+    const r = await aiCall({ mode: "chat", note: strip(v), form: formForAi(), history });
     if (!r.error && r.data && r.data.kind === "chat") res = r.data;
   } catch (e) { res = null; }
   $("quickBtn").disabled = false;
@@ -1991,12 +1993,14 @@ function applyAi(job, d) {
   if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
 }
 let aiJob = null;
+// The AI reader gets 45 seconds; after that the page carries on as if it were unavailable instead of "Reading…" forever
+function aiCall(body) { return Promise.race([sb.functions.invoke("draft-reader", { body }), new Promise((ok) => setTimeout(() => ok({ error: "timeout" }), 45000))]); }
 function aiAskDone() { aiJob = null; }
 async function runAi(job, final) {
   $("quickBtn").disabled = true; asSay("Reading your note…");
   let data = null;
   try {
-    const r = await sb.functions.invoke("draft-reader", { body: { note: job.note, answers: job.answers, final: !!final } });
+    const r = await aiCall({ note: job.note, answers: job.answers, final: !!final });
     if (!r.error && r.data && !r.data.error) data = r.data;
   } catch (e) { data = null; }
   $("quickBtn").disabled = false;
