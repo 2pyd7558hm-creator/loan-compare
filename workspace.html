@@ -570,6 +570,14 @@ function renderCards() {
       </div>
     </div>`).join("");
   $("cards").innerHTML = html + (state.scenarios.length < 4 ? `<button class="add" id="addBtn">+ Add an option</button>` : "");
+  state.scenarios.forEach((s, i) => syncMI(i));
+}
+// Conventional PMI isn't charged at 20% down or more: show the field as $0 (the rate is kept in case the down payment drops again)
+function syncMI(i) {
+  const s = state.scenarios[i], el = document.getElementById(`s${i}-mi`); if (!el) return;
+  const none = s.type === "conv" && s.downPct >= 20;
+  el.disabled = none; el.value = none ? 0 : s.mi;
+  const lbl = el.closest("label"); if (lbl && lbl.firstChild && lbl.firstChild.nodeType === 3) lbl.firstChild.textContent = none ? "PMI (none at 20% down)" : "PMI rate / yr";
 }
 
 $("cards").addEventListener("input", (e) => {
@@ -584,7 +592,8 @@ $("cards").addEventListener("input", (e) => {
     renderCards();
   }
   else if (k === "term") s.term = +t.value;
-  else s[k] = +t.value || 0;
+  else if (k === "mi" && t.disabled) return;
+  else { s[k] = +t.value || 0; if (k === "downPct") syncMI(+i); }
   render();
 });
 $("cards").addEventListener("click", (e) => {
@@ -933,6 +942,9 @@ function optionSpecs(text) {
   let specs = [];
   if (pieces.length > 1) {
     pieces.forEach((pc, i) => { const cs = pc.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean); if (cs.length) specs.push(i === 0 ? cs[cs.length - 1] : cs[0]); });
+    // typed without commas ("John Smith 450k CO no points vs ..."): start the first option at its first loan word
+    const m0 = specs[0] && specs[0].match(/\b(?:no|zero|conv|conventional|fha|va|buy ?down|\d+(?:\.\d+)?\s*(?:%|points?|pts?|-?\s*(?:yr|year)s?\b))/i);
+    if (m0 && m0.index > 0) specs[0] = specs[0].slice(m0.index);
   } else {
     specs = text.split(/[,;\n]+/).map((x) => x.trim()).filter((x) => OPT_WORD.test(x));
   }
@@ -971,7 +983,19 @@ function quickDraft(text) {
     if (!st && US_STATES.includes(up) && up !== "VA") { st = up; continue; }
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
     if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
-    if (!name && /^[a-z][a-z .'&-]+$/i.test(p) && !/\b(conv|conventional|fha|va|vs|points?|down|refi|refinance|condo|year|yr)\b/i.test(p) && !US_STATES.includes(up)) name = p;
+    const q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
+    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
+  }
+  if (!st) { const sm = (text.match(/\b[A-Z]{2}\b/g) || []).find((x) => US_STATES.includes(x) && x !== "VA"); if (sm) st = sm; }
+  if (!name) {
+    const words = text.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "").split(/\s+/), keep = [];
+    for (const w of words) {
+      const bare = w.replace(/[,;:.]+$/, "");
+      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
+      keep.push(bare); if (/[,;]$/.test(w)) break;
+    }
+    while (keep.length && /^(and|&)$/i.test(keep[keep.length - 1])) keep.pop();
+    if (keep.length >= 1 && keep.length <= 6) name = keep.join(" ");
   }
   const refi = /\brefi(nance)?\b/.test(low), condo = /\bcondo\b/.test(low);
   let preset = "starter";
