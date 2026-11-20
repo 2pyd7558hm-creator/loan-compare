@@ -261,7 +261,23 @@ body.presenting #table td, body.presenting #table th { cursor: cell }
 .cash-steps .cs-nav { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap }
 .cash-steps .cs-cover { margin: 10px 0 0; font-weight: 600 }
 .cash-steps .cs-cover.short { color: var(--bad, #b42318) }
+.cash-steps .cs-cover.ok { color: var(--good, #157f3c) }
+.cs-optl { font-weight: 400; color: var(--muted); font-size: 14px }
+.calc-note-sm { font-size: 14px; color: var(--muted); max-width: 80ch; margin: 10px 0 0 }
+#cashTable small { color: var(--muted); font-size: 11px; font-weight: 400 }
 body.readonly .cash-steps, body.readonly .cs-open { display: none }
+.assist { margin-bottom: 14px }
+.as-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px }
+.as-head h3 { margin: 0; font-size: 17px }
+.as-head .as-for { font-size: 13px; color: var(--muted); flex: 1 }
+.as-log { display: grid; gap: 8px; max-height: 300px; overflow-y: auto; margin-bottom: 10px; padding: 2px }
+.as-msg { max-width: 82%; padding: 9px 12px; border-radius: 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap }
+.as-msg.a { background: var(--soft); justify-self: start; border-top-left-radius: 4px }
+.as-msg.u { background: var(--brand); color: #fff; justify-self: end; border-top-right-radius: 4px }
+.as-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; white-space: normal }
+.as-btns .btn { padding: 5px 10px; font-size: 13px }
+.new-client { width: 100% }
+.list-h { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted) }
 .ai-note { font-size: 12px; color: var(--muted); margin: -8px 0 12px }
 body.readonly .staff-only, body.readonly .fee-x { display: none }
 body.readonly table.fees input, body.readonly table.fees select { pointer-events: none; background: var(--soft); border-color: transparent }
@@ -356,34 +372,33 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
         <h2>Clients</h2>
         <div><span class="who" id="whoAmI"></span> <button class="btn link" id="signOutBtn" type="button">Sign out</button></div>
       </div>
-      <div class="ws-grid">
-        <div class="panel">
-          <div style="display:flex;gap:8px">
-            <input id="search" type="search" placeholder="Search clients" aria-label="Search clients">
-            <button class="btn primary" id="newBtn" type="button">New</button>
-          </div>
-          <div class="list" id="list"></div>
-        </div>
-        <div class="panel">
-          <form class="quick" id="quickForm">
-            <textarea id="quickIn" rows="3" autocomplete="off" aria-label="Quick draft" placeholder="Type it the way you'd say it, e.g. Jordan Smith, $450,000, Eagle County CO, conv 5% down at 6.5% vs FHA 3.5% down, $8,000 seller credit, 2-1 buydown, paying cash. With a client open: &quot;add paying cash&quot; or &quot;add a 15 yr at 6%&quot;."></textarea>
-            <button class="btn" type="submit" id="quickBtn">Draft it</button>
-            <label class="ai-toggle" title="Uses Claude to read the note and ask a question when something is missing"><input type="checkbox" id="aiOn" checked> AI reader</label>
-          </form>
-          <div class="ai-ask" id="aiAsk" hidden>
-            <p id="aiQ"></p>
-            <form class="quick" id="aiAnsForm"><input id="aiAns" type="text" autocomplete="off" aria-label="Your answer"><button class="btn primary" type="submit">Answer</button><button class="btn" type="button" id="aiSkip">Skip, just draft it</button></form>
-          </div>
-          <details class="quick-help"><summary>What can I type here?</summary>
+      <div class="panel assist" id="assist">
+        <div class="as-head"><h3>Assistant</h3><span class="as-for" id="asFor">New client</span>
+          <label class="ai-toggle" title="Uses Claude to read your note and ask when something is missing"><input type="checkbox" id="aiOn" checked> AI reader</label></div>
+        <div class="as-log" id="asLog" aria-live="polite"></div>
+        <form class="quick" id="quickForm">
+          <textarea id="quickIn" rows="3" autocomplete="off" aria-label="Message the assistant" placeholder="Type it the way you'd say it, e.g. Jordan Smith, $450,000, Eagle County CO, conv 5% down at 6.5% vs FHA 3.5% down, $8,000 seller credit, 2-1 buydown. With a client open: &quot;add paying cash&quot; or &quot;add a 15 yr at 6%&quot;."></textarea>
+          <button class="btn primary" type="submit" id="quickBtn">Send</button>
+        </form>
+        <details class="quick-help"><summary>What can I type here?</summary>
             <ul>
               <li><b>A new client:</b> name, price or home value, state and county, refi or condo.</li>
               <li><b>Up to 4 loan options:</b> conventional, FHA, VA, jumbo, ARM (7/6, 5/6), 30, 20 or 15 years, rate, points, down payment ("conv 5% down at 6.5% vs FHA 3.5% down").</li>
               <li><b>Extras:</b> seller credit, temporary buydown (2-1, 3-2-1), down payment assistance or a 2nd loan.</li>
               <li><b>Calculators:</b> cost of waiting, rent vs buy (rent 2400), affordability (income 95k), debts, extra payments, ARM vs fixed, bid over asking, equity, investment property, paying cash.</li>
-              <li><b>Follow-ups:</b> with a client open, a note adds to that file ("add paying cash", "add a 15 yr at 6%", "add rent vs buy, rent 2400"). Click <b>New</b> first to start a different client.</li>
-              <li>Press Enter to draft; Shift+Enter starts a new line.</li>
+              <li><b>Follow-ups:</b> with a client open, a note adds to that file ("add paying cash", "add a 15 yr at 6%", "add rent vs buy, rent 2400"). Click <b>+ New client</b> first to start a different client.</li>
+              <li>Press Enter to send; Shift+Enter starts a new line.</li>
             </ul></details>
-          <p class="ai-note" id="aiNote">The AI reader gets the note without client names or street addresses. Don't type Social Security, account or income numbers.</p>
+        <p class="ai-note" id="aiNote">The AI reader gets your note without client names or street addresses. Don't type Social Security, account or income numbers.</p>
+      </div>
+      <div class="ws-grid">
+        <div class="panel">
+          <button class="btn primary new-client" id="newBtn" type="button">+ New client</button>
+          <h3 class="list-h">Saved clients</h3>
+          <input id="search" type="search" placeholder="Search by name or code" aria-label="Search saved clients">
+          <div class="list" id="list"></div>
+        </div>
+        <div class="panel">
           <div class="client-fields">
             <label class="f">Client name(s)<input id="cName" type="text" autocomplete="off" placeholder="e.g. Sam & Alex Ray, or Sam Ray and Alex Jones"></label>
             <div class="f code-row" id="codeRow" hidden>Client code<div><b id="cCode"></b> <button class="btn" type="button" id="codeCopy">Copy</button></div></div>
@@ -1013,6 +1028,15 @@ function fillFeeTemplateSelect() {
   sel.innerHTML = `<option value="">Choose a fee template…</option>` + states.map((st) => `<optgroup label="${escAttr(st)}">` +
     feeTemplates.map((t, i) => (t.state || "Other") === st ? `<option value="${i}">${escAttr(t.name)}</option>` : "").join("") + `</optgroup>`).join("");
 }
+// Loan options start with our own fee template: Xpert Purchase (Xpert Condo Purchase or Xpert Refinance when they fit)
+function defaultTemplate(refi, condo) {
+  const by = (re) => feeTemplates.find((t) => re.test(t.name));
+  return (refi ? by(/^xpert refi/i) : condo ? by(/^xpert condo/i) : null) || by(/^xpert purchase$/i) || by(/^xpert purchase/i) || null;
+}
+function applyDefaultTemplate(refi, condo) {
+  const t = defaultTemplate(refi, condo);
+  if (t && (!state.closing || state.closing.template !== t.name)) { applyFeeTemplate(t); syncActive(); }
+}
 function applyFeeTemplate(t) {
   state.closing = { template: t.name, items: JSON.parse(JSON.stringify(t.items)), open: false };
   state.scenarios.forEach((s) => s.fees = 0); // the template now carries the lender fees
@@ -1046,7 +1070,7 @@ renderCards();
 render();
 </script>
 
-<script src="calcs.js?v=20261120d"></script>
+<script src="calcs.js?v=20261120e"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 /* ===== Workspace: connects the calculator to Supabase ===== */
@@ -1139,6 +1163,7 @@ function basicsOf() {
     if (c.kind === "compare") {
       b.price ??= d.price; b.taxes ??= d.taxes; b.insurance ??= d.insurance; b.hoa ??= d.hoa; b.rate ??= d.scenarios[0] && d.scenarios[0].rate; b.downPct ??= d.scenarios[0] && d.scenarios[0].downPct;
       b.term ??= d.scenarios[0] && d.scenarios[0].term;
+      if (b.cashClose == null) b.cashClose = cashClosing();
       // Loan closing costs of the first option (points, lender and third-party fees), for the Cost of paying cash tab
       if (b.closing == null && d.scenarios[0]) { try { const a = analyze(d.scenarios[0]); b.closing = Math.round(a.pointsCost + a.lenderFees + a.cc.other); } catch (e) { /* leave the estimate */ } }
     }
@@ -1226,9 +1251,10 @@ async function staffView(session) {
 let tplFromDb = false;
 async function loadFeeTemplates() {
   const { data, error } = await sb.from("fee_templates").select("id, name, state, items").order("state").order("name");
-  if (error || !data) { tplFromDb = false; feeTemplates = DEFAULT_FEE_TEMPLATES.slice(); }
+  if (error || !data || !data.length) { tplFromDb = !error && !!data; feeTemplates = DEFAULT_FEE_TEMPLATES.slice(); }
   else { tplFromDb = true; feeTemplates = data; }
   fillFeeTemplateSelect();
+  if (!current && !(state.closing && state.closing.template)) applyDefaultTemplate();
 }
 $("tplSaveOpen").addEventListener("click", () => {
   const cur = feeTemplates.find((t) => t.name === state.closing.template);
@@ -1424,14 +1450,17 @@ function quickDraft(text, ai) {
   else if (/\bdown\b/.test(low)) preset = "down";
   // Start a fresh comparison, then fill it in
   newComparison();
+  draftInfo = { guessed: [], noPrice: !price && !refi, overLimit: 0 };
   if (name) $("cName").value = name;
   $("cTitle").value = (refi ? "Refinance options" : "Purchase options") + (addr ? ", " + addr : "");
   if (price) setPrice(price);
   if (st) {
     const pool = feeTemplates.filter((t) => (t.state || "").toUpperCase() === st);
-    const pick = pool.find((t) => refi ? /refi/i.test(t.name) : condo ? /condo/i.test(t.name) : !/refi|condo/i.test(t.name)) || pool[0];
+    const fits = (t) => refi ? /refi/i.test(t.name) : condo ? /condo/i.test(t.name) : !/refi|condo/i.test(t.name);
+    const pick = pool.find((t) => /^xpert/i.test(t.name) && fits(t)) || pool.find(fits) || pool[0];
     if (pick) applyFeeTemplate(pick);
-  }
+    else applyDefaultTemplate(refi, condo);
+  } else applyDefaultTemplate(refi, condo);
   // County, for the conforming loan limit: "Eagle County" (a high-cost county) or any "<name> County"
   let county = null;
   if (st) county = Object.keys(CLL_HIGH[st] || {}).find((c) => new RegExp("\\b" + c.replace(/[.'\\]/g, ".") + "\\s+county\\b", "i").test(text)) || null;
@@ -1464,20 +1493,33 @@ function quickDraft(text, ai) {
     opts.forEach((o) => { const x = o.ai; if (!x) return; if (x.seller_credit) o.s.credit = Math.round(x.seller_credit); if (x.second_amount >= 1000) Object.assign(o.s, { amt2: Math.round(x.second_amount), rate2: x.second_rate || 0, term2: x.second_rate ? 30 : 0 }); });
     opts.forEach((o) => { if (o.bd) o.s.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.bd]} Buydown`; });
     guessed = opts.some((o) => o.guessed);
+    draftInfo.guessed = opts.map((o, i) => o.guessed ? i : -1).filter((i) => i >= 0);
     state.scenarios = opts.map((o) => o.s); renderCards(); render();
     optText = opts.map((o) => o.s.name).join(" vs ");
   } else {
     applyPreset(preset);
     optText = $("preset").querySelector(`option[value="${preset}"]`).textContent;
+    draftInfo.guessed = state.scenarios.map((x, i) => i); draftInfo.sample = true;
   }
   // State's FHFA home value growth (5-yr average) for the equity chart
   if (st && fhfaRate(st, DEFAULT_SRC) !== null) { state.appreciation = fhfaRate(st, DEFAULT_SRC); $("appreciation").value = state.appreciation; render(); }
   file.st = st || undefined; file.rent = rent || undefined;
   const added = calcsFromNote(text, { refi, rent, income, extraYearN, extraMonth, specs });
   if (added.length) drawTabs();
+  draftInfo.overLimit = overLimit.length;
   const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
   const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
+}
+// Closing costs a cash buyer still pays (title, closing and recording fees, deed tax), taken from the comparison's fee template.
+// A cash-purchase fee template will replace this later.
+function cashClosing() {
+  let t = 0;
+  for (const it of (state.closing && state.closing.items) || []) {
+    if (it.prepaid || it.by === "S" || it.by === "L") continue;
+    if (/closing fee|settlement|escrow fee|recording|deed|transfer|stamp|owner'?s title|survey|inspection|attorney/i.test(it.name)) t += feeAmount(it, 0).a;
+  }
+  return Math.round(t);
 }
 // Calculators a note asks for. On a follow-up (reuse), a tab of the same kind already in the file is updated instead of added again.
 function calcsFromNote(text, ctx, reuse) {
@@ -1514,7 +1556,7 @@ function calcsFromNote(text, ctx, reuse) {
     // Compare paying cash with the first financed option
     // Compare with the one financed option typed ("paying cash vs 20% down at 6.5%"), else the first option
     const s0 = specs && specs.length === 1 ? { ...state.scenarios[0], ...parseOption(specs[0], { ...state.scenarios[0] }).s } : state.scenarios[0], a = analyze(s0);
-    addOrFill("cash", { downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other) }, true); added.push("cost of paying cash");
+    addOrFill("cash", { price: state.price, downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other), cashClose: cashClosing() }, true); added.push("cost of paying cash");
   }
   return added;
 }
@@ -1528,6 +1570,7 @@ function isFollowUp(text) {
   return FOLLOW_RE.test(text) || !b.price;
 }
 function followUp(text) {
+  draftInfo = null;
   const b = noteBasics(text), low = text.toLowerCase();
   const refi = /\brefi(nance)?\b/.test(low);
   const comp = file.calcs.find((c) => c.kind === "compare");
@@ -1548,6 +1591,8 @@ function followUp(text) {
         if (o.bd) { o.s.bd = o.bd; o.s.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.bd]} Buydown`; }
       }
       state.scenarios.push(...opts.map((o) => o.s)); renderCards(); render(); syncActive();
+      const n0 = state.scenarios.length - opts.length;
+      draftInfo = { guessed: opts.map((o, i) => o.guessed ? n0 + i : -1).filter((i) => i >= 0), noPrice: false, overLimit: 0 };
       did.push((opts.length === 1 ? "loan option " : "loan options ") + opts.map((o) => o.s.name).join(", ") + (opts.some((o) => o.guessed) ? " (rate is a placeholder, so enter today's pricing)" : ""));
     }
   }
@@ -1561,8 +1606,106 @@ function followUp(text) {
     if (last) { syncActive(); file.active = last.id; showCalc(); } else drawTabs();
   }
   const who = $("cName").value.trim() || "this comparison";
-  if (!did.length) { say("saveStatus", `I couldn't tell what to add to ${who}. Try "add paying cash", "add a 15 yr at 6%" or "add rent vs buy, rent 2400". To start a different client, click New first.`, true); return; }
-  say("saveStatus", `Added to ${who}: ${did.join("; ")}. Save to keep it. To start a different client instead, click New first.`);
+  if (!did.length) { say("saveStatus", `I couldn't tell what to add to ${who}. Try "add paying cash", "add a 15 yr at 6%" or "add rent vs buy, rent 2400". To start a different client, click + New client first.`, true); return false; }
+  say("saveStatus", `Added to ${who}: ${did.join("; ")}. Save to keep it.`);
+  return true;
+}
+/* ---- Assistant: a short conversation above the form. It fills the form, asks about what's missing, and suggests calculators. ---- */
+let draftInfo = null, asLog = [], asPending = null, asQueue = [], asDeclined = new Set();
+const AS_HELLO = "Tell me about the client and the loans you want to compare. I'll fill in the form below and ask about anything missing.";
+function asRender() {
+  const el = $("asLog"), last = asLog[asLog.length - 1];
+  el.innerHTML = (asLog.length ? asLog.slice(-10) : [{ who: "a", text: AS_HELLO }]).map((m) => `<div class="as-msg ${m.who}">${escH(m.text)}${m === last && m.buttons ? `<div class="as-btns">${m.buttons.map((b, j) => `<button type="button" class="btn${j ? "" : " primary"}" data-as="${j}">${escH(b.label)}</button>`).join("")}</div>` : ""}</div>`).join("");
+  el.scrollTop = el.scrollHeight;
+  const who = $("cName").value.trim();
+  $("asFor").textContent = current || who ? "Working on " + (who || "this comparison") + " · click + New client to start someone else" : "New client";
+}
+function asSay(text, buttons, pending) { const last = asLog[asLog.length - 1]; if (last) last.buttons = null; asLog.push({ who: "a", text, buttons }); asPending = pending || null; asRender(); }
+function asUser(text) { const last = asLog[asLog.length - 1]; if (last) last.buttons = null; asLog.push({ who: "u", text }); asRender(); }
+function asReset(hello) { asLog = []; asPending = null; asQueue = []; asDeclined = new Set(); if (hello) asLog.push({ who: "a", text: hello }); asRender(); }
+$("asLog").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-as]"), m = asLog[asLog.length - 1]; if (!b || !m || !m.buttons) return;
+  const btn = m.buttons[+b.dataset.as]; if (!btn) return;
+  asPending = null; asUser(btn.label); btn.fn();
+});
+function asNext() { asPending = null; const q = asQueue.shift(); if (q) q(); }
+// After a draft or a follow-up: say what was done, then ask about what's missing, one thing at a time
+function asAfterDraft(ok) {
+  // The assistant asks about the county and the rates itself, so the draft summary leaves those reminders out
+  const msg = $("saveStatus").textContent.replace(/ (?:One loan is|Some loans are) over the .*?high balance from jumbo\./, "").replace(/ Rates you didn't type are placeholders, so enter today's pricing/, " Check the pricing"); say("saveStatus", "");
+  if (msg) asSay(msg);
+  const info = draftInfo || {}; draftInfo = null; asQueue = [];
+  if (ok === false) return;
+  if (info.noPrice) asQueue.push(asAskPrice);
+  if (info.overLimit) asQueue.push(asAskCounty);
+  if (info.guessed && info.guessed.length) asQueue.push(() => asAskRates(info.guessed, info.sample));
+  asQueue.push(asSuggest);
+  asNext();
+}
+const compareTab = () => file.calcs.find((c) => c.kind === "compare");
+function toCompare() { const c = compareTab(); if (c && file.active !== c.id) { syncActive(); file.active = c.id; showCalc(); } return c; }
+function asAskPrice() {
+  asSay("What's the purchase price or home value? I used $450,000 for now.", [{ label: "Keep $450,000", fn: asNext }], { kind: "price", answer: (t) => {
+    const p = noteBasics(t).price || (+(t.replace(/[^\d.]/g, "")) >= 10000 ? +(t.replace(/[^\d.]/g, "")) : null);
+    if (p && toCompare()) { setPrice(p); render(); syncActive(); asSay(`Price set to ${usd.format(p)}. Taxes and insurance moved with it.`); }
+    else asSay("I didn't catch a price there, so I left it. You can change it under The home.");
+    asNext();
+  } });
+}
+function asAskCounty() {
+  asSay(`At least one loan is over the ${usd.format(CLL_BASE)} conforming limit. Which county and state is the home in? That decides high balance or jumbo.`, [{ label: "Skip", fn: asNext }], { kind: "county", answer: (t) => {
+    const b = noteBasics(t), st = b.st || file.st || null;
+    const raw = t.replace(/,?\s*\b[A-Z]{2}\b\.?\s*$/, "").replace(/\s+county\b.*$/i, "").replace(/,.*$/, "").trim();
+    const known = st && Object.keys(CLL_HIGH[st] || {}).find((c) => c.toLowerCase() === raw.toLowerCase());
+    const county = known || raw.replace(/\b\w/g, (x) => x.toUpperCase());
+    if (!county || !toCompare()) { asSay("I didn't catch a county, so I left the loans as they are."); return asNext(); }
+    file.county = county; if (st) file.st = st;
+    const out = [];
+    state.scenarios.forEach((x, i) => {
+      if (x.type !== "conv" && x.type !== "jumbo") return;
+      const lc = loanClass(state.price * (1 - x.downPct / 100), st, county);
+      if (lc.kind === "jumbo" && x.type === "conv") { x.type = "jumbo"; x.mi = 0; x.name = x.name.replace(/^Conv\b/, "Jumbo"); }
+      out.push(`${LETTERS[i]}: ${{ conforming: "conforming", high: "high balance", jumbo: "jumbo", unknown: "not sure" }[lc.kind]}`);
+    });
+    renderCards(); render(); syncActive();
+    asSay(`${county} County${st ? ", " + st : ""}. ${out.join(", ")}.`);
+    asNext();
+  } });
+}
+function asAskRates(idx, sample) {
+  const list = idx.map((i) => `${LETTERS[i]} (${state.scenarios[i].name}, ${+state.scenarios[i].rate}%)`).join(", ");
+  const many = idx.length > 1;
+  asSay(`${sample ? "I started from a sample comparison. " : ""}I estimated the rate for ${list}. Type your rate${many ? "s in order, like 6.5, 6.25" : ""}, or should I keep my estimate${many ? "s" : ""}?`,
+    [{ label: many ? "Keep the estimates" : "Keep the estimate", fn: () => { asSay("OK. Update them on the cards when you have today's pricing."); asNext(); } }],
+    { kind: "rates", answer: (t) => {
+      const nums = (t.match(/\d+(?:\.\d+)?/g) || []).map(Number).filter((x) => x >= 1 && x <= 15);
+      if (!nums.length || !toCompare()) { asSay("I didn't see a rate there, so I kept the estimates."); return asNext(); }
+      const done = [];
+      idx.forEach((i, k) => { const r = nums.length === 1 ? nums[0] : nums[k]; if (r == null) return; const x = state.scenarios[i]; x.rate = r; x.name = x.name.replace(/ at \d+(?:\.\d+)?%/, ` at ${r}%`); done.push(`${LETTERS[i]} ${r}%`); });
+      renderCards(); render(); syncActive();
+      asSay(`Rates updated: ${done.join(", ")}.`); asNext();
+    } });
+}
+// Calculators worth offering for these loans (at most two per draft, never one the loan officer turned down)
+function asSuggest() {
+  const has = (k) => file.calcs.some((c) => c.kind === k), sc = state.scenarios, out = [];
+  const offer = (key, q, fn) => { if (!asDeclined.has(key) && out.length < 2) { out.push({ key, q, fn }); asDeclined.add(key); } };
+  const ctx = { refi: false, rent: null, income: null, extraYearN: null, extraMonth: null, specs: null };
+  const addTab = (txt) => { const added = calcsFromNote(txt, ctx, true); drawTabs(); asSay(`Added ${added.join(", ")} as a tab below. Save when it looks right.`); asNext(); };
+  if (sc.length >= 3 && !has("amort")) offer("amort", "Want to show how extra payments could pay one of these off faster?", () => addTab("extra"));
+  if (sc.some((x) => x.arm) && !has("arm")) offer("arm", "One option is an ARM. Want an ARM vs fixed tab showing how the payment could change later?", () => addTab("ARM"));
+  if (sc.some((x) => x.type === "fha" || x.downPct <= 5) && !has("rvb") && out.length < 2 && !asDeclined.has("rvb")) { out.push({ key: "rvb", q: "With a small down payment, a rent vs buy comparison often helps. What's their rent now? Or say no.", rent: true }); asDeclined.add("rvb"); }
+  if (!out.length && !has("cow") && !/refi/i.test($("cTitle").value)) offer("cow", "Want a cost of waiting tab, showing what it could cost to wait a year to buy?", () => addTab("wait"));
+  if (!out.length) { asNext(); return; }
+  out.forEach((o) => asQueue.push(() => {
+    const no = { label: "No thanks", fn: () => { asDeclined.add(o.key); asNext(); } };
+    if (o.rent) asSay(o.q, [no], { kind: "rent", answer: (t) => {
+      const r = +(t.replace(/[^\d.]/g, "")); if (/^\s*no\b/i.test(t) || !(r >= 100)) { asDeclined.add("rvb"); asSay("OK, no rent vs buy."); return asNext(); }
+      calcsFromNote("rent " + r, { ...ctx, rent: r }, true); drawTabs(); asSay(`Added rent vs buy with rent of ${usd.format(r)} a month.`); asNext();
+    } });
+    else asSay(o.q, [{ label: "Yes, add it", fn: o.fn }, no], { kind: "suggest", answer: (t) => { /^\s*(y|yes|sure|ok|please)\b/i.test(t) ? o.fn() : (asDeclined.add(o.key), asNext()); } });
+  }));
+  asNext();
 }
 /* ---- AI reader: Claude reads the note (without names or street addresses) through our Supabase function ---- */
 // Take the client's name, street address and anything like an email, phone or SSN out of the note before it leaves the browser
@@ -1601,47 +1744,59 @@ function applyAi(job, d) {
   if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
 }
 let aiJob = null;
-function aiAskDone() { $("aiAsk").hidden = true; aiJob = null; }
+function aiAskDone() { aiJob = null; }
 async function runAi(job, final) {
-  $("quickBtn").disabled = true; say("saveStatus", "Reading your note…");
+  $("quickBtn").disabled = true; asSay("Reading your note…");
   let data = null;
   try {
     const r = await sb.functions.invoke("draft-reader", { body: { note: job.note, answers: job.answers, final: !!final } });
     if (!r.error && r.data && !r.data.error) data = r.data;
   } catch (e) { data = null; }
   $("quickBtn").disabled = false;
+  if (asLog.length && asLog[asLog.length - 1].text === "Reading your note…") { asLog.pop(); asRender(); }
   if (!data || (data.kind === "draft" && !data.draft) || (data.kind === "question" && !data.question && !data.draft)) {
     aiAskDone(); quickDraft(job.raw);
     say("saveStatus", $("saveStatus").textContent + " (The AI reader wasn't available, so the typed rules read this note.)");
-    return;
+    asAfterDraft(); return;
   }
   if (data.kind === "question" && data.question && !final) {
-    aiJob = job; $("aiQ").textContent = data.question; $("aiAns").value = ""; $("aiAsk").hidden = false; $("aiAns").focus();
-    say("saveStatus", "One question before drafting.");
+    aiJob = job;
+    asSay(data.question, [{ label: "Skip, just draft it", fn: () => runAi(job, true) }], { kind: "ai", answer: (a) => {
+      job.answers.push({ q: data.question, a: stripNote(a, { name: job.name, addr: job.addr }).note }); runAi(job);
+    } });
+    $("quickIn").focus();
     return;
   }
   aiAskDone();
-  if (!data.draft) { quickDraft(job.raw); return; }
-  applyAi(job, data.draft);
+  if (!data.draft) quickDraft(job.raw); else applyAi(job, data.draft);
+  asAfterDraft();
 }
 try { if (localStorage.getItem("aiReader") === "off") $("aiOn").checked = false; } catch (e) { /* storage blocked */ }
 $("aiOn").addEventListener("change", (e) => { try { localStorage.setItem("aiReader", e.target.checked ? "on" : "off"); } catch (err) { /* storage blocked */ } });
 $("quickForm").addEventListener("submit", (e) => {
   e.preventDefault(); const v = $("quickIn").value.trim(); if (!v) return;
-  $("quickIn").value = ""; aiAskDone();
-  if (isFollowUp(v)) { followUp(v); return; }
-  if (!$("aiOn").checked) { quickDraft(v); return; }
+  $("quickIn").value = "";
+  // Shown in the conversation without the street address; the name is kept, since this stays in the browser
+  asUser(v);
+  // An answer to the assistant's question, unless it's clearly a new note (another client, or a price with loan options)
+  if (asPending) {
+    const b = noteBasics(v), cur = $("cName").value.trim().toLowerCase();
+    const fresh = FOLLOW_RE.test(v) || (b.name && b.name.toLowerCase() !== cur && (b.price || optionSpecs(v).length >= 1)) || (asPending.kind !== "price" && b.price && optionSpecs(v).length >= 1);
+    if (!fresh) { const h = asPending; asPending = null; h.answer(v); return; }
+    asPending = null; asQueue = [];
+  }
+  aiAskDone();
+  if (isFollowUp(v)) { asAfterDraft(followUp(v)); return; }
+  asReset(); asUser(v);
+  if (!$("aiOn").checked) { quickDraft(v); asAfterDraft(); return; }
   newComparison(); // clear the last client while the AI reader works, so a question isn't shown over someone else's file
   const st = stripNote(v);
   runAi({ raw: v, note: st.note, name: st.name, addr: st.addr, answers: [] });
 });
 $("quickIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("quickForm").requestSubmit(); } });
-$("aiAnsForm").addEventListener("submit", (e) => {
-  e.preventDefault(); const a = $("aiAns").value.trim(); if (!aiJob || !a) return;
-  const job = aiJob; job.answers.push({ q: $("aiQ").textContent, a: stripNote(a, { name: job.name, addr: job.addr }).note });
-  runAi(job);
-});
-$("aiSkip").addEventListener("click", () => { if (aiJob) runAi(aiJob, true); });
+asRender();
+$("cName").addEventListener("input", () => asRender());
+$("cName").addEventListener("input", () => asRender());
 
 async function loadList() {
   // client_code arrives with the 004_client_codes.sql update; until it's run, load the list without it
@@ -1672,11 +1827,12 @@ function fillClient(r) {
   if (!r || !r.shared) stopPresenting();
   say("saveStatus", "");
 }
-function newComparison() { stopPresenting(); current = null; setState(JSON.parse(JSON.stringify(BLANK))); fillClient(null); drawList(); }
+function newComparison() { stopPresenting(); current = null; setState(JSON.parse(JSON.stringify(BLANK))); applyDefaultTemplate(); fillClient(null); drawList(); }
 async function openComparison(id) {
   const { data, error } = await sb.from("comparisons").select("*").eq("id", id).single();
   if (error) { say("saveStatus", "Couldn't open it: " + error.message, true); return; }
   stopPresenting(); current = data; setState(data.data); fillClient(data); drawList();
+  asReset(`Opened ${data.client_name}${data.client_code ? " (" + data.client_code + ")" : ""}. Tell me what to add or change, like "add paying cash" or "add a 15 yr at 6%".`);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 async function save() {
@@ -1926,7 +2082,7 @@ $("setPwForm").addEventListener("submit", async (e) => {
 });
 $("signOutBtn").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
 $("search").addEventListener("input", drawList);
-$("newBtn").addEventListener("click", newComparison);
+$("newBtn").addEventListener("click", () => { newComparison(); asReset(); $("quickIn").focus(); });
 $("list").addEventListener("click", (e) => { const b = e.target.closest("button[data-id]"); if (b) openComparison(b.dataset.id); });
 $("saveBtn").addEventListener("click", save);
 $("delBtn").addEventListener("click", () => { $("delConfirm").hidden = false; });
