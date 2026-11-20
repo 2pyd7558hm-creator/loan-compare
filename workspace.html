@@ -240,6 +240,12 @@ body.presenting #table td, body.presenting #table th { cursor: cell }
 .fee-empty { margin: 0; font-size: 14px; color: var(--muted) }
 .quick { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap }
 .quick input { flex: 1 1 320px }
+.quick textarea { flex: 1 1 100%; font: inherit; font-size: 15px; line-height: 1.45; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; min-height: 70px; resize: vertical; width: 100% }
+.quick textarea:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px }
+.quick-help { font-size: 13px; color: var(--muted); margin: -6px 0 10px }
+.quick-help summary { cursor: pointer; color: var(--brand); font-weight: 600 }
+.quick-help ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.5 }
+.tax-hint { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; font-weight: 400 }
 .ai-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap }
 .ai-toggle input { flex: none; width: auto; margin: 0 }
 .ai-ask { border: 1px solid var(--line); border-left: 3px solid var(--accent, #0f766e); border-radius: 8px; padding: 10px 12px; margin: -4px 0 12px }
@@ -247,6 +253,15 @@ body.presenting #table td, body.presenting #table th { cursor: cell }
 .ai-ask .quick { margin: 0 }
 .code-row b { font-size: 16px; letter-spacing: .02em; margin-right: 6px; color: var(--fg) }
 .code-row > div { display: flex; align-items: center; min-height: 40px }
+.cash-steps { border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: var(--radius); padding: 14px 16px; margin: 0 0 16px; background: var(--surface) }
+.cash-steps .cs-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted) }
+.cash-steps h3 { margin: 6px 0 4px; font-size: 17px }
+.cash-steps .cs-q p { margin: 0 0 10px; color: var(--muted); max-width: 70ch }
+.cash-steps .fields { padding: 0; border: 0; box-shadow: none; background: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 260px)); gap: 12px }
+.cash-steps .cs-nav { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap }
+.cash-steps .cs-cover { margin: 10px 0 0; font-weight: 600 }
+.cash-steps .cs-cover.short { color: var(--bad, #b42318) }
+body.readonly .cash-steps, body.readonly .cs-open { display: none }
 .ai-note { font-size: 12px; color: var(--muted); margin: -8px 0 12px }
 body.readonly .staff-only, body.readonly .fee-x { display: none }
 body.readonly table.fees input, body.readonly table.fees select { pointer-events: none; background: var(--soft); border-color: transparent }
@@ -351,7 +366,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
         </div>
         <div class="panel">
           <form class="quick" id="quickForm">
-            <input id="quickIn" type="text" autocomplete="off" aria-label="Quick draft" placeholder="Quick draft: Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA, rent 2400, wait">
+            <textarea id="quickIn" rows="3" autocomplete="off" aria-label="Quick draft" placeholder="Type it the way you'd say it, e.g. Jordan Smith, $450,000, Eagle County CO, conv 5% down at 6.5% vs FHA 3.5% down, $8,000 seller credit, 2-1 buydown, paying cash. With a client open: &quot;add paying cash&quot; or &quot;add a 15 yr at 6%&quot;."></textarea>
             <button class="btn" type="submit" id="quickBtn">Draft it</button>
             <label class="ai-toggle" title="Uses Claude to read the note and ask a question when something is missing"><input type="checkbox" id="aiOn" checked> AI reader</label>
           </form>
@@ -359,6 +374,15 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
             <p id="aiQ"></p>
             <form class="quick" id="aiAnsForm"><input id="aiAns" type="text" autocomplete="off" aria-label="Your answer"><button class="btn primary" type="submit">Answer</button><button class="btn" type="button" id="aiSkip">Skip, just draft it</button></form>
           </div>
+          <details class="quick-help"><summary>What can I type here?</summary>
+            <ul>
+              <li><b>A new client:</b> name, price or home value, state and county, refi or condo.</li>
+              <li><b>Up to 4 loan options:</b> conventional, FHA, VA, jumbo, ARM (7/6, 5/6), 30, 20 or 15 years, rate, points, down payment ("conv 5% down at 6.5% vs FHA 3.5% down").</li>
+              <li><b>Extras:</b> seller credit, temporary buydown (2-1, 3-2-1), down payment assistance or a 2nd loan.</li>
+              <li><b>Calculators:</b> cost of waiting, rent vs buy (rent 2400), affordability (income 95k), debts, extra payments, ARM vs fixed, bid over asking, equity, investment property, paying cash.</li>
+              <li><b>Follow-ups:</b> with a client open, a note adds to that file ("add paying cash", "add a 15 yr at 6%", "add rent vs buy, rent 2400"). Click <b>New</b> first to start a different client.</li>
+              <li>Press Enter to draft; Shift+Enter starts a new line.</li>
+            </ul></details>
           <p class="ai-note" id="aiNote">The AI reader gets the note without client names or street addresses. Don't type Social Security, account or income numbers.</p>
           <div class="client-fields">
             <label class="f">Client name(s)<input id="cName" type="text" autocomplete="off" placeholder="e.g. Sam & Alex Ray, or Sam Ray and Alex Jones"></label>
@@ -415,8 +439,8 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
     <h2>The home</h2>
     <div class="panel fields">
       <label class="f">Purchase price<div class="affix pre"><span>$</span><input id="price" type="number" min="0" step="1000"></div></label>
-      <label class="f">Property taxes / yr<div class="affix pre"><span>$</span><input id="taxes" type="number" min="0" step="100"></div></label>
-      <label class="f">Home insurance / yr<div class="affix pre"><span>$</span><input id="insurance" type="number" min="0" step="100"></div></label>
+      <label class="f">Property taxes / yr<div class="affix pre"><span>$</span><input id="taxes" type="number" min="0" step="100"></div><span class="tax-hint" id="taxesHint"></span></label>
+      <label class="f">Home insurance / yr<div class="affix pre"><span>$</span><input id="insurance" type="number" min="0" step="100"></div><span class="tax-hint" id="insuranceHint"></span></label>
       <label class="f">HOA dues / mo<div class="affix pre"><span>$</span><input id="hoa" type="number" min="0" step="10"></div></label>
       <label class="f">Home value growth / yr<div class="affix"><input id="appreciation" type="number" min="-10" max="15" step="0.5"><span>%</span></div></label>
     </div>
@@ -688,9 +712,31 @@ function breakEven(a, base) {
 }
 
 /* ---------- Inputs ---------- */
+// Taxes and insurance follow the price: each is kept as a percent of the price, so a new price rescales them.
+// Typing a tax or insurance amount sets that percent for this comparison.
+const ESC_PCT = { taxes: "taxPct", insurance: "insPct" };
+function escPct(k) {
+  const pk = ESC_PCT[k];
+  if (!(state[pk] > 0) && state.price > 0) state[pk] = state[k] / state.price * 100;
+  return state[pk] || 0;
+}
+function escrowHints() {
+  for (const k of ["taxes", "insurance"]) { const el = $(k + "Hint"); if (el) el.textContent = state.price > 0 ? `${(escPct(k)).toFixed(2)}% of price, follows the price` : ""; }
+}
+function setPrice(p) {
+  escPct("taxes"); escPct("insurance");
+  state.price = p;
+  for (const k of ["taxes", "insurance"]) { state[k] = Math.round(p * escPct(k) / 100 / 10) * 10; $(k).value = state[k]; }
+  $("price").value = p; escrowHints();
+}
 ["price", "taxes", "insurance", "hoa", "appreciation"].forEach((k) => {
   $(k).value = state[k];
-  $(k).addEventListener("input", () => { state[k] = +$(k).value || 0; render(); });
+  $(k).addEventListener("input", () => {
+    const v = +$(k).value || 0;
+    if (k === "price") { if (v > 0) { escPct("taxes"); escPct("insurance"); state.price = v; for (const e of ["taxes", "insurance"]) { state[e] = Math.round(v * state[ESC_PCT[e]] / 100 / 10) * 10; $(e).value = state[e]; } } else state.price = v; }
+    else { state[k] = v; if (ESC_PCT[k] && state.price > 0) state[ESC_PCT[k]] = v / state.price * 100; }
+    escrowHints(); render();
+  });
 });
 
 function field(label, key, i, s, opts = {}) {
@@ -1000,7 +1046,7 @@ renderCards();
 render();
 </script>
 
-<script src="calcs.js?v=20261120c"></script>
+<script src="calcs.js?v=20261120d"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 /* ===== Workspace: connects the calculator to Supabase ===== */
@@ -1032,8 +1078,10 @@ function getState() { syncActive(); return JSON.parse(JSON.stringify(file)); }
 function shareView(f) { return { ...f, calcs: f.calcs.filter(isShared) }; }
 function setCompare(obj) {
   Object.assign(state, obj);
+  state.taxPct = obj.taxPct; state.insPct = obj.insPct; // older saves: worked out from the saved amounts
   state.closing = obj.closing ? JSON.parse(JSON.stringify(obj.closing)) : { template: "", items: [] };
   TOP_KEYS.forEach((k) => { $(k).value = state[k]; });
+  escrowHints();
   renderCards(); render();
 }
 // keepActive: on the borrower's side, stay on the tab they picked (when not following, or when the loan officer is on a hidden tab)
@@ -1088,7 +1136,12 @@ function basicsOf() {
   const b = { st: file.st, rent: file.rent };
   for (const c of file.calcs) {
     const d = c.data;
-    if (c.kind === "compare") { b.price ??= d.price; b.taxes ??= d.taxes; b.insurance ??= d.insurance; b.hoa ??= d.hoa; b.rate ??= d.scenarios[0] && d.scenarios[0].rate; b.downPct ??= d.scenarios[0] && d.scenarios[0].downPct; }
+    if (c.kind === "compare") {
+      b.price ??= d.price; b.taxes ??= d.taxes; b.insurance ??= d.insurance; b.hoa ??= d.hoa; b.rate ??= d.scenarios[0] && d.scenarios[0].rate; b.downPct ??= d.scenarios[0] && d.scenarios[0].downPct;
+      b.term ??= d.scenarios[0] && d.scenarios[0].term;
+      // Loan closing costs of the first option (points, lender and third-party fees), for the Cost of paying cash tab
+      if (b.closing == null && d.scenarios[0]) { try { const a = analyze(d.scenarios[0]); b.closing = Math.round(a.pointsCost + a.lenderFees + a.cc.other); } catch (e) { /* leave the estimate */ } }
+    }
     else if (c.kind === "cow" || c.kind === "rvb") { b.price ??= d.price; b.taxes ??= d.taxes; b.insurance ??= d.insurance; b.rate ??= d.rate; b.downPct ??= d.downPct; b.st ??= d.st; if (c.kind === "rvb") b.rent ??= d.rent; }
   }
   return b;
@@ -1304,6 +1357,8 @@ function parseOption(sp, base) {
   return { guessed, src: sp, bd, typed: { points: points !== null, down: /\bdown\b/.test(low) }, s: { name: "", type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, arm, fees: base.fees, downPct: down,
     mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
+// Words that end a client's name in a note
+const NAME_STOP = /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|purchasing|buy|buying|home|house|property|loans?|price|scenarios?|options?|compare|comparison|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash|seller|credit|dpa|add|can|could|we|please|also|with|new|wants?|needs?|looking|is|are|has|the|a|an|to|of|in)$/i;
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 // The client, price, state and extras in a note, read by the typed rules (also used to strip names before the AI reader)
 function noteBasics(text) {
@@ -1337,15 +1392,18 @@ function noteBasics(text) {
     if (!st && US_STATES.includes(up) && up !== "VA") { st = up; continue; }
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
     if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
-    const q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
-    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
+    let q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
+    // "Stephanie Jones Purchase": keep the name, drop the loan words after it (needs two name words first, so "Eagle County" isn't a name)
+    const qw = q.split(/\s+/), cut = qw.findIndex((w) => NAME_STOP.test(w.replace(/[.]/g, "")));
+    if (cut >= 2 && qw.slice(0, cut).every((w) => /^[a-z][a-z.'-]*$|^&$|^and$/i.test(w))) q = qw.slice(0, cut).join(" ");
+    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !q.split(/\s+/).some((w) => NAME_STOP.test(w)) && !US_STATES.includes(q.toUpperCase())) name = q;
   }
   if (!st) { const sm = (text.match(/\b[A-Z]{2}\b/g) || []).find((x) => US_STATES.includes(x) && x !== "VA"); if (sm) st = sm; }
   if (!name) {
     const words = text.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "").split(/\s+/), keep = [];
     for (const w of words) {
       const bare = w.replace(/[,;:.]+$/, "");
-      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|investment|investor|rental|county|jumbo|cash)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
+      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || NAME_STOP.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
       keep.push(bare); if (/[,;]$/.test(w)) break;
     }
     while (keep.length && /^(and|&)$/i.test(keep[keep.length - 1])) keep.pop();
@@ -1368,7 +1426,7 @@ function quickDraft(text, ai) {
   newComparison();
   if (name) $("cName").value = name;
   $("cTitle").value = (refi ? "Refinance options" : "Purchase options") + (addr ? ", " + addr : "");
-  if (price) { state.price = price; $("price").value = price; }
+  if (price) setPrice(price);
   if (st) {
     const pool = feeTemplates.filter((t) => (t.state || "").toUpperCase() === st);
     const pick = pool.find((t) => refi ? /refi/i.test(t.name) : condo ? /condo/i.test(t.name) : !/refi|condo/i.test(t.name)) || pool[0];
@@ -1415,17 +1473,31 @@ function quickDraft(text, ai) {
   // State's FHFA home value growth (5-yr average) for the equity chart
   if (st && fhfaRate(st, DEFAULT_SRC) !== null) { state.appreciation = fhfaRate(st, DEFAULT_SRC); $("appreciation").value = state.appreciation; render(); }
   file.st = st || undefined; file.rent = rent || undefined;
+  const added = calcsFromNote(text, { refi, rent, income, extraYearN, extraMonth, specs });
+  if (added.length) drawTabs();
+  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
+  const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
+  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
+}
+// Calculators a note asks for. On a follow-up (reuse), a tab of the same kind already in the file is updated instead of added again.
+function calcsFromNote(text, ctx, reuse) {
+  const { refi, rent, income, extraYearN, extraMonth, specs } = ctx;
   const added = [];
-  if (/\bwait(ing)?\b|cost of waiting/i.test(text)) { addCalc("cow", refi ? { mode: "refi" } : null, true); added.push("cost of waiting"); }
-  if (rent) { addCalc("rvb", { rent }, true); added.push("rent vs buy"); }
-  if (income || /\bafford/i.test(text)) { addCalc("aff", income ? { income } : null, true); added.push("affordability"); }
-  if (/\bdebts?\b|consolidat/i.test(text)) { addCalc("debt", null, true); added.push("debt consolidation"); }
+  const addOrFill = (kind, extra, silent) => {
+    const have = reuse && file.calcs.find((c) => c.kind === kind);
+    if (have) { Object.assign(have.data, extra || {}); calcsFromNote.last = have; return have; }
+    return (calcsFromNote.last = addCalc(kind, extra, silent));
+  };
+  if (/\bwait(ing)?\b|cost of waiting/i.test(text)) { addOrFill("cow", refi ? { mode: "refi" } : null, true); added.push("cost of waiting"); }
+  if (rent) { addOrFill("rvb", { rent }, true); added.push("rent vs buy"); }
+  if (income || /\bafford/i.test(text)) { addOrFill("aff", income ? { income } : null, true); added.push("affordability"); }
+  if (/\bdebts?\b|consolidat/i.test(text)) { addOrFill("debt", null, true); added.push("debt consolidation"); }
   if (/\bextra\b|pay ?off (early|faster|sooner)/i.test(text)) {
     // Use the first option's loan; "2 extra payments a year" means two extra principal and interest payments each year
     const a = analyze(state.scenarios[0]), s0 = state.scenarios[0], ex = { loan: Math.round(a.loan), rate: s0.rate, term: s0.term };
     if (extraYearN) Object.assign(ex, { yearly: Math.round(extraYearN * a.pi), extra: 0 });
     if (extraMonth) ex.extra = extraMonth;
-    addCalc("amort", ex, true);
+    addOrFill("amort", ex, true);
     added.push("extra payments" + (extraYearN ? ` (${extraYearN} extra payment${extraYearN === 1 ? "" : "s"} a year, ${usd.format(Math.round(extraYearN * a.pi))})` : extraMonth ? ` (${usd.format(extraMonth)} a month)` : ""));
   }
   if (/\barm\b|adjustable/i.test(text)) {
@@ -1433,21 +1505,64 @@ function quickDraft(text, ai) {
     const a = state.scenarios.find((x) => x.arm), f = state.scenarios.find((x) => !x.arm), ex = {};
     if (a) Object.assign(ex, { loan: Math.round(analyze(a).loan), armRate: a.rate, fixedYrs: a.arm, term: a.term });
     if (f) Object.assign(ex, { fixedRate: f.rate, flatRate: f.rate });
-    addCalc("arm", ex, true); added.push("ARM vs fixed");
+    addOrFill("arm", ex, true); added.push("ARM vs fixed");
   }
-  if (/over ?ask|\bbid\b/i.test(text)) { addCalc("equity", { mode: "bid" }, true); added.push("bid over asking"); }
-  else if (/\bequity\b|apprec/i.test(text)) { addCalc("equity", null, true); added.push("equity & appreciation"); }
-  if (/\binvest(ment|or)?\b|\brental\b/i.test(text)) { addCalc("invest", null, true); added.push("investment property"); }
+  if (/over ?ask|\bbid\b/i.test(text)) { addOrFill("equity", { mode: "bid" }, true); added.push("bid over asking"); }
+  else if (/\bequity\b|apprec/i.test(text)) { addOrFill("equity", null, true); added.push("equity & appreciation"); }
+  if (/\binvest(ment|or)?\b|\brental\b/i.test(text)) { addOrFill("invest", null, true); added.push("investment property"); }
   if (CASH_RE.test(text)) {
     // Compare paying cash with the first financed option
     // Compare with the one financed option typed ("paying cash vs 20% down at 6.5%"), else the first option
     const s0 = specs && specs.length === 1 ? { ...state.scenarios[0], ...parseOption(specs[0], { ...state.scenarios[0] }).s } : state.scenarios[0], a = analyze(s0);
-    addCalc("cash", { downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other) }, true); added.push("cost of paying cash");
+    addOrFill("cash", { downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other) }, true); added.push("cost of paying cash");
   }
-  if (added.length) drawTabs();
-  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
-  const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
-  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
+  return added;
+}
+/* ---- Follow-up notes: with a client open, "add paying cash" or "add a 15 yr at 6%" adds to that comparison ---- */
+const FOLLOW_RE = /^\s*(?:add|also|plus|include|and|can|could|please|let'?s|show|now|then|put)\b/i;
+function isFollowUp(text) {
+  const open = !!current || !!$("cName").value.trim();
+  if (!open) return false;
+  const b = noteBasics(text), cur = $("cName").value.trim().toLowerCase();
+  if (b.name && b.name.toLowerCase() !== cur) return false;
+  return FOLLOW_RE.test(text) || !b.price;
+}
+function followUp(text) {
+  const b = noteBasics(text), low = text.toLowerCase();
+  const refi = /\brefi(nance)?\b/.test(low);
+  const comp = file.calcs.find((c) => c.kind === "compare");
+  const did = [];
+  if (comp && file.active !== comp.id) { syncActive(); file.active = comp.id; showCalc(); }
+  if (b.price && comp) { setPrice(b.price); render(); did.push("price " + usd.format(b.price)); }
+  if (b.st) file.st = b.st;
+  // Loan options typed in the follow-up are added after the ones already there (up to 4)
+  const specs = optionSpecs(text.replace(CASH_RE, " ").replace(/\bcost of paying cash\b/ig, " "));
+  if (comp && specs.length) {
+    const room = 4 - state.scenarios.length;
+    if (room <= 0) did.push("no room for another loan option (4 is the most), so change one of the cards instead");
+    else {
+      const base = { ...state.scenarios[0] }, opts = specs.slice(0, room).map((sp) => parseOption(sp, base));
+      for (const o of opts) {
+        if (o.s.type === "conv" && loanClass(state.price * (1 - o.s.downPct / 100), file.st, file.county).kind === "jumbo") { o.s.type = "jumbo"; o.s.mi = 0; }
+        o.s.name = (o.s.type === "conv" ? "" : { jumbo: "Jumbo ", fha: "FHA ", va: "VA " }[o.s.type]) + (o.s.arm ? `${o.s.arm}/6 ARM` : `${o.s.term} Yr Fixed`) + (o.typed.points ? ` - ${+o.s.points} Point${+o.s.points === 1 ? "" : "s"}` : "") + (o.typed.down ? ` - ${+o.s.downPct}% Down` : "") + ` at ${+o.s.rate}%`;
+        if (o.bd) { o.s.bd = o.bd; o.s.name += `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[o.bd]} Buydown`; }
+      }
+      state.scenarios.push(...opts.map((o) => o.s)); renderCards(); render(); syncActive();
+      did.push((opts.length === 1 ? "loan option " : "loan options ") + opts.map((o) => o.s.name).join(", ") + (opts.some((o) => o.guessed) ? " (rate is a placeholder, so enter today's pricing)" : ""));
+    }
+  }
+  // "paying cash" with no "pay": "add the cost of paying cash" / "add cash"
+  const cashText = /\bcash\b/i.test(text) && !CASH_RE.test(text) ? text + " paying cash" : text;
+  calcsFromNote.last = null;
+  const added = calcsFromNote(cashText, { refi, rent: b.rent, income: b.income, extraYearN: b.extraYearN, extraMonth: b.extraMonth, specs: null }, true);
+  if (added.length) {
+    const last = calcsFromNote.last;
+    did.push(added.join(", "));
+    if (last) { syncActive(); file.active = last.id; showCalc(); } else drawTabs();
+  }
+  const who = $("cName").value.trim() || "this comparison";
+  if (!did.length) { say("saveStatus", `I couldn't tell what to add to ${who}. Try "add paying cash", "add a 15 yr at 6%" or "add rent vs buy, rent 2400". To start a different client, click New first.`, true); return; }
+  say("saveStatus", `Added to ${who}: ${did.join("; ")}. Save to keep it. To start a different client instead, click New first.`);
 }
 /* ---- AI reader: Claude reads the note (without names or street addresses) through our Supabase function ---- */
 // Take the client's name, street address and anything like an email, phone or SSN out of the note before it leaves the browser
@@ -1514,11 +1629,13 @@ $("aiOn").addEventListener("change", (e) => { try { localStorage.setItem("aiRead
 $("quickForm").addEventListener("submit", (e) => {
   e.preventDefault(); const v = $("quickIn").value.trim(); if (!v) return;
   $("quickIn").value = ""; aiAskDone();
+  if (isFollowUp(v)) { followUp(v); return; }
   if (!$("aiOn").checked) { quickDraft(v); return; }
   newComparison(); // clear the last client while the AI reader works, so a question isn't shown over someone else's file
   const st = stripNote(v);
   runAi({ raw: v, note: st.note, name: st.name, addr: st.addr, answers: [] });
 });
+$("quickIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("quickForm").requestSubmit(); } });
 $("aiAnsForm").addEventListener("submit", (e) => {
   e.preventDefault(); const a = $("aiAns").value.trim(); if (!aiJob || !a) return;
   const job = aiJob; job.answers.push({ q: $("aiQ").textContent, a: stripNote(a, { name: job.name, addr: job.addr }).note });
