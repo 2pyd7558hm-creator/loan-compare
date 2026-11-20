@@ -195,8 +195,9 @@ body.readonly .preset, body.readonly .preset-note { display: none }
 .lo-pointer svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)) }
 .lo-pointer.flip span { left: auto; right: 6px }
 .lo-pointer span { position: absolute; left: 18px; top: 16px; white-space: nowrap; background: #c2410c; color: #fff; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 6px }
-.lo-glow { outline: 3px solid #f59e0b !important; outline-offset: 3px; border-radius: 6px; box-shadow: 0 0 0 8px rgba(245,158,11,.25) !important; transition: outline-color .3s }
-td.lo-glow, th.lo-glow { outline-offset: -3px !important; box-shadow: inset 0 0 0 999px rgba(245,158,11,.16) !important; border-radius: 0 }
+/* Boxes (fields, cards, panels, charts) glow brand teal; a single table cell glows orange */
+.lo-glow { outline: 3px solid #3cc0c1 !important; outline-offset: 3px; border-radius: 6px; box-shadow: 0 0 0 8px rgba(60,192,193,.28) !important; transition: outline-color .3s }
+td.lo-glow, th.lo-glow { outline-color: #f59e0b !important; outline-offset: -3px !important; box-shadow: inset 0 0 0 999px rgba(245,158,11,.16) !important; border-radius: 0 }
 /* ===== Closing costs ===== */
 table.fees { min-width: 640px }
 table.fees td, table.fees th { padding: 6px 8px; vertical-align: middle }
@@ -245,7 +246,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
 </header>
 
 <div class="wrap">
-<main>
+<main id="calc">
   <section id="ws" class="ws">
     <!-- Sign-in (staff) -->
     <div id="vLogin" class="panel login" hidden>
@@ -335,7 +336,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     <p>Enter up to four loan options. See the monthly payment, cash needed at closing, and what each option really costs over the time you expect to keep it.</p>
   </div>
 
-  <section>
+  <section id="homeSec">
     <h2>The home</h2>
     <div class="panel fields">
       <label class="f">Purchase price<div class="affix pre"><span>$</span><input id="price" type="number" min="0" step="1000"></div></label>
@@ -386,7 +387,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     </div>
   </section>
 
-  <section>
+  <section id="optionsSec">
     <div class="opts-head">
       <h2>Loan options</h2>
       <label class="preset">Quick start
@@ -405,7 +406,7 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
     <div class="cards" id="cards"></div>
   </section>
 
-  <section>
+  <section id="resultsSec">
     <div class="results-head">
       <h2>How they compare</h2>
       <div><span class="seg-label">Keep the loan for</span><div class="seg" id="horizon" role="group" aria-label="Years you expect to keep the loan"></div></div>
