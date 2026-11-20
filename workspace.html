@@ -1617,6 +1617,16 @@ function quickDraft(text, ai) {
     opts.forEach((o) => { o.s.est = !!o.guessed; });
     state.scenarios = opts.map((o) => o.s); renderCards(); render();
     optText = opts.map((o) => o.s.name).join(" vs ");
+  } else if (refi && state.price) {
+    // A refinance with no loans typed: 30 and 15 year conventional for what they owe (plus debts being paid off), or 80% of the value
+    const loan = refiLoan((ai && ai.raw) || text, state.price);
+    const down = Math.round(Math.max(3, Math.min(97, 100 - loan / state.price * 100)) * 10000) / 10000;
+    const a = { ...state.scenarios[0] };
+    state.scenarios = [30, 15].map((term) => { const x = { ...a, type: "conv", term, arm: 0, points: 0, bd: 0, credit: 0, amt2: 0, downPct: down, fthb: false, rate: +(term === 15 ? (+a.rate || 6.75) - 0.5 : (+a.rate || 6.75)).toFixed(3), est: true }; x.mi = convPmi(down, term, false); if (loanClass(state.price * (1 - down / 100), st, county).kind === "jumbo") { x.type = "jumbo"; x.mi = 0; } return x; });
+    nameOptions(state.scenarios.map((x) => ({ s: x, typed: { down: false } })));
+    renderCards(); render();
+    optText = state.scenarios.map((x) => x.name).join(" vs ") + ` (loan ${usd.format(Math.round(state.price * (1 - down / 100)))})`;
+    draftInfo.guessed = [0, 1]; draftInfo.sample = true;
   } else {
     applyPreset(preset);
     optText = $("preset").querySelector(`option[value="${preset}"]`).textContent;
@@ -1634,6 +1644,15 @@ function quickDraft(text, ai) {
   const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
   autoTitle();
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
+}
+// Refinance loan amount from a note: "owes 300k" / "balance of $300,000", plus "credit cards 40k" / "pay off $25k of debt" being consolidated
+function refiLoan(text, value) {
+  const amt = (m) => m ? parseFloat(m[1].replace(/,/g, "")) * (/^k/i.test(m[2] || "") ? 1000 : /^m/i.test(m[2] || "") ? 1e6 : 1) : 0;
+  const owed = amt(text.match(/\b(?:owes?|owed|owing|balance(?:\s+(?:is|of))?|payoff(?:\s+(?:is|of))?|current\s+(?:loan|mortgage)(?:\s+(?:is|of))?)\s*(?:about|around|~)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m(?:il)?)?\b/i));
+  const debt = amt(text.match(/\b(?:credit\s+cards?|cards|debts?|car\s+loan|student\s+loans?|cash[- ]?out)\s*(?:of|is|are|:|total(?:ing)?)?\s*(?:about|around|~)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m(?:il)?)?\b/i))
+    || amt(text.match(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?\s+(?:in|of)\s+(?:credit\s+card|card|consumer)?\s*debts?\b/i));
+  const loan = owed >= 1000 && owed < value ? owed + (debt >= 100 ? debt : 0) : 0;
+  return loan > 0 && loan <= value * 0.97 ? loan : value * 0.8;
 }
 // Closing costs a cash buyer still pays (title, closing and recording fees, deed tax), taken from the comparison's fee template.
 // A cash-purchase fee template will replace this later.
@@ -1988,7 +2007,7 @@ function applyAi(job, d) {
     d.extra_payments_per_year ? `${n(d.extra_payments_per_year)} extra payments a year` : d.extra_monthly ? `extra $${n(d.extra_monthly)} a month` : d.extra_payments ? "extra payments" : "",
     d.arm_vs_fixed || anyArm ? "ARM" : "", d.bid_over_asking ? "over asking" : "", d.equity ? "equity" : "", d.investment ? "investment" : "", d.paying_cash ? "paying cash" : "",
     d.seller_credit_all ? "seller credit $" + n(d.seller_credit_all) : "", d.dpa_amount ? `DPA $${n(d.dpa_amount)}${d.dpa_rate ? ` at ${d.dpa_rate}%` : ""}` : ""];
-  quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4) });
+  quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4), raw: job.note });
   const notes = (d.assumptions || []).filter(Boolean);
   if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
 }
