@@ -257,6 +257,12 @@ body.readonly table.fees input, body.readonly table.fees select { pointer-events
 .rows .row:first-child { border-top: 0 }
 .rows .row.total { font-weight: 600 }
 .cobrand-row { margin-top: 12px; font-size: 14px }
+table.debts { min-width: 640px }
+table.debts td, table.debts th { padding: 6px 8px; vertical-align: middle }
+table.debts th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; text-align: left }
+table.debts input[type=number] { width: 110px } table.debts input[type=checkbox] { width: auto }
+table.debts .c { text-align: center }
+body.readonly table.debts input, body.readonly table.debts select { pointer-events: none; background: var(--soft); border-color: transparent }
 body:not([data-kind="compare"]) .calc-compare { display: none !important }
 body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
 .ehl { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--fg) }
@@ -468,12 +474,17 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
   <section id="cowSec" class="calc-pane" hidden></section>
   <section id="rvbSec" class="calc-pane" hidden></section>
   <section id="affSec" class="calc-pane" hidden></section>
+  <section id="debtSec" class="calc-pane" hidden></section>
+  <section id="amortSec" class="calc-pane" hidden></section>
+  <section id="armSec" class="calc-pane" hidden></section>
+  <section id="equitySec" class="calc-pane" hidden></section>
+  <section id="investSec" class="calc-pane" hidden></section>
 
   <footer class="disclosure">
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
     <p><strong>For illustration only.</strong> This is not a loan offer, a commitment to lend, or a Loan Estimate. Figures are estimates based on the inputs shown. Actual rates, APRs, fees and payments depend on credit, property, loan amount, occupancy and market conditions, and are subject to underwriting approval. Rates can change daily.</p>
     <p id="calcNote" hidden></p>
-    <p class="calc-compare">APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%, VA funding fee 2.15% first use) as finance charges. Conventional PMI is shown until the balance reaches 78% of the purchase price. FHA annual MIP is shown for the life of the loan with less than 10% down, or 11 years otherwise. Cash to close shows down payment, points and lender fees, plus third-party fees, prepaids and escrow deposits when closing costs are itemized. Fees paid by the seller or lender are not included. Prepaids and escrow deposits are estimates. Taxes and insurance are estimates.</p>
+    <p class="calc-compare">APR is estimated and treats points, lender fees, mortgage insurance and financed upfront premiums (FHA upfront MIP 1.75%; VA funding fee for first use, 2.15% with less than 5% down, 1.5% with 5% or more, 1.25% with 10% or more) as finance charges. Conventional PMI is an estimate and is shown until the balance reaches 78% of the purchase price. FHA annual MIP follows HUD's current table (Mortgagee Letter 2023-05), is figured on each year's average scheduled balance as HUD does, and is shown for 11 years with 10% or more down, otherwise for the life of the loan. Cash to close shows down payment, points and lender fees, plus third-party fees, prepaids and escrow deposits when closing costs are itemized. Fees paid by the seller or lender are not included. Prepaids and escrow deposits are estimates. Taxes and insurance are estimates.</p>
     <p class="ehl"><svg viewBox="0 0 64 64" width="34" height="34" role="img" aria-label="Equal Housing Lender"><path d="M32 4 2 26h8v32h44V26h8L32 4z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="19" y="30" width="26" height="6" fill="currentColor"/><rect x="19" y="42" width="26" height="6" fill="currentColor"/></svg><span>EQUAL HOUSING<br>LENDER</span></p>
     <p id="brandFoot"></p>
     <p class="links"><a href="https://www.nmlsconsumeraccess.org/" target="_blank" rel="noopener">NMLS Consumer Access</a> · <a href="https://bit.ly/TexasRecoveryFundNotice" target="_blank" rel="noopener">Texas Recovery Fund Notice</a> · <a href="https://www.thatmortgagecouple.com/legal" target="_blank" rel="noopener">Legal</a> · <a href="https://www.thatmortgagecouple.com/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></p>
@@ -508,18 +519,37 @@ const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValu
 const MONTHS = 360;
 
 /* ---------- Finance math ---------- */
+// FHA annual MIP from HUD Mortgagee Letter 2023-05 (case numbers from March 20, 2023). LTV uses the base loan (before upfront MIP).
+// Returns the annual rate in % and how many years it is charged (11 years at 90% LTV or less, otherwise the life of the loan).
+function fhaMip(baseLoan, value, termYrs) {
+  const ltv = value > 0 ? baseLoan / value : 1, big = baseLoan > 726200;
+  let rate;
+  if (termYrs > 15) rate = big ? (ltv > 0.95 ? 0.75 : 0.70) : (ltv > 0.95 ? 0.55 : 0.50);
+  else rate = big ? (ltv > 0.90 ? 0.65 : ltv > 0.78 ? 0.40 : 0.15) : (ltv > 0.90 ? 0.40 : 0.15);
+  return { rate, years: ltv <= 0.90 ? 11 : termYrs };
+}
+// VA funding fee for a purchase, first use, by down payment (va.gov, effective April 7, 2023). Subsequent use under 5% down is 3.3%.
+function vaFee(downPct) { return downPct >= 10 ? 1.25 : downPct >= 5 ? 1.5 : 2.15; }
+// Starting PMI rate for conventional loans (borrower-paid monthly, good credit). An estimate the loan officer can change on the card.
+function convPmi(downPct, termYrs) { return downPct >= 20 ? 0 : termYrs <= 15 ? 0.3 : downPct < 5 ? 0.62 : downPct < 10 ? 0.55 : downPct < 15 ? 0.45 : 0.3; }
+
 function analyze(s) {
   const value = state.price;
   const down = value * s.downPct / 100;
   const base = Math.max(value - down, 0);
-  const financed = s.type === "fha" ? base * 0.0175 : s.type === "va" ? base * 0.0215 : 0;
+  const fha = s.type === "fha" ? fhaMip(base, value, s.term) : null;
+  const financed = fha ? base * 0.0175 : s.type === "va" ? base * vaFee(s.downPct) / 100 : 0;
   const loan = base + financed;
   const n = s.term * 12, r = s.rate / 1200;
   const pi = loan === 0 ? 0 : r ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n;
   const pointsCost = loan * s.points / 100;
   const cc = closingTotals(loan);
   const upfront = pointsCost + s.fees + cc.apr + cc.other + financed;
-  const miMonths = s.type === "fha" ? (s.downPct < 10 ? n : 132) : n;
+  const miMonths = fha ? Math.min(n, fha.years * 12) : n;
+  // FHA monthly MIP the way HUD figures it: average scheduled balance for each loan year x annual rate,
+  // divided by (1 + upfront MIP factor) since the upfront MIP is financed, then divided by 12
+  const fhaYr = [];
+  if (fha) { let bb = loan; for (let y = 0; y * 12 < miMonths; y++) { let sum = 0; for (let k = 0; k < 12; k++) { bb = Math.max(0, bb + bb * r - pi); sum += bb; } fhaYr.push(sum / 12 * fha.rate / 100 / 1.0175 / 12); } }
 
   const bal = [loan], cost = [upfront], equity = [value - loan], pay = [];
   let b = loan, cumInt = 0, cumMI = 0, firstMI = null;
@@ -528,7 +558,7 @@ function analyze(s) {
     if (m <= n && b > 0.005) {
       interest = b * r;
       if (s.type === "conv" && s.downPct < 20 && b / value > 0.78) mi = base * s.mi / 1200;
-      if (s.type === "fha" && m <= miMonths) mi = b * s.mi / 1200;
+      if (fha && m <= miMonths) mi = fhaYr[Math.floor((m - 1) / 12)] || 0;
       p = Math.min(pi - interest, b);
       b -= p;
     }
@@ -614,18 +644,23 @@ function renderCards() {
         ${field("Points", "points", i, s, { suf: "%", step: 0.125 })}
         ${field(hasClosing() ? "Extra lender fees" : "Lender fees", "fees", i, s, { pre: "$", step: 50 })}
         ${field("Down payment", "downPct", i, s, { suf: "%", step: 0.5 })}
-        ${s.type === "va" ? "" : field(s.type === "fha" ? "Annual MIP" : "PMI rate / yr", "mi", i, s, { suf: "%", step: 0.05 })}
+        ${field(s.type === "fha" ? "Annual MIP (HUD)" : s.type === "va" ? "VA funding fee" : "PMI rate / yr", "mi", i, s, { suf: "%", step: 0.05 })}
       </div>
     </div>`).join("");
   $("cards").innerHTML = html + (state.scenarios.length < 4 ? `<button class="add" id="addBtn">+ Add an option</button>` : "");
   state.scenarios.forEach((s, i) => syncMI(i));
 }
-// Conventional PMI isn't charged at 20% down or more: show the field as $0 (the rate is kept in case the down payment drops again)
+// Conventional PMI isn't charged at 20% down or more: show the field as $0 (the rate is kept in case the down payment drops again).
+// FHA MIP and the VA funding fee come from the published tables, so their fields are read only and follow the down payment, term and price.
 function syncMI(i) {
   const s = state.scenarios[i], el = document.getElementById(`s${i}-mi`); if (!el) return;
-  const none = s.type === "conv" && s.downPct >= 20;
-  el.disabled = none; el.value = none ? 0 : s.mi;
-  const lbl = el.closest("label"); if (lbl && lbl.firstChild && lbl.firstChild.nodeType === 3) lbl.firstChild.textContent = none ? "PMI (none at 20% down)" : "PMI rate / yr";
+  const base = Math.max(state.price * (1 - s.downPct / 100), 0);
+  let label, val, locked;
+  if (s.type === "fha") { const f = fhaMip(base, state.price, s.term); label = `Annual MIP (HUD, ${f.years === 11 ? "11 yrs" : "life of loan"})`; val = f.rate; locked = true; }
+  else if (s.type === "va") { label = "VA funding fee (first use)"; val = vaFee(s.downPct); locked = true; }
+  else { const none = s.downPct >= 20; label = none ? "PMI (none at 20% down)" : "PMI rate / yr"; val = none ? 0 : s.mi; locked = none; }
+  el.disabled = locked; el.value = val;
+  const lbl = el.closest("label"); if (lbl && lbl.firstChild && lbl.firstChild.nodeType === 3) lbl.firstChild.textContent = label;
 }
 
 $("cards").addEventListener("input", (e) => {
@@ -635,13 +670,14 @@ $("cards").addEventListener("input", (e) => {
   if (k === "name") s[k] = t.value;
   else if (k === "type") {
     s.type = t.value;
-    if (s.type === "fha") { s.mi = 0.55; if (s.downPct < 3.5) s.downPct = 3.5; }
-    if (s.type === "conv") s.mi = 0.45;
+    if (s.type === "fha" && s.downPct < 3.5) s.downPct = 3.5;
+    if (s.type === "conv") s.mi = convPmi(s.downPct, s.term);
     renderCards();
   }
   else if (k === "term") s.term = +t.value;
   else if (k === "mi" && t.disabled) return;
-  else { s[k] = +t.value || 0; if (k === "downPct") syncMI(+i); }
+  else { s[k] = +t.value || 0; }
+  if (k === "downPct" || k === "term") syncMI(+i);
   render();
 });
 $("cards").addEventListener("click", (e) => {
@@ -690,6 +726,7 @@ function lineChart(el, series, marker) {
 
 /* ---------- Render ---------- */
 function render() {
+  state.scenarios.forEach((s, i) => { if (s.type !== "conv") syncMI(i); });
   const res = state.scenarios.map(analyze);
   renderClosing(res[0]);
   const h = state.horizon * 12;
@@ -1129,7 +1166,7 @@ function parseOption(sp, base) {
   if (down === null) down = type === "fha" ? 3.5 : type === "va" ? 0 : base.downPct;
   const nm = sp.replace(/\s+/g, " ").trim();
   return { guessed, s: { name: nm.charAt(0).toUpperCase() + nm.slice(1), type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, fees: base.fees, downPct: down,
-    mi: type === "fha" ? 0.55 : type === "va" ? 0 : (down < 5 ? 0.62 : down < 10 ? 0.55 : (term || 30) <= 15 ? 0.3 : 0.45) } };
+    mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 function quickDraft(text) {
@@ -1153,14 +1190,14 @@ function quickDraft(text) {
     if (!st && up === "VA" && parts.filter((x) => /\bva\b/i.test(x)).length > 1) { st = up; continue; }
     if (!addr && /^\d+\s+\S+/.test(p) && !/^\$?\d[\d,]*(\.\d+)?\s*(k|m)?$/i.test(p) && !OPT_WORD.test(p)) { addr = p; continue; }
     const q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
-    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
+    if (!name && /^[a-z][a-z .'&-]+$/i.test(q) && !/\b(conv|conventional|fha|va|vs|points?|pts?|down|refi|refinance|condo|year|yr|fixed|rate|rent|income|wait|waiting|afford|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental)\b/i.test(q) && !US_STATES.includes(q.toUpperCase())) name = q;
   }
   if (!st) { const sm = (text.match(/\b[A-Z]{2}\b/g) || []).find((x) => US_STATES.includes(x) && x !== "VA"); if (sm) st = sm; }
   if (!name) {
     const words = text.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "").split(/\s+/), keep = [];
     for (const w of words) {
       const bare = w.replace(/[,;:.]+$/, "");
-      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
+      if (!/^[a-z][a-z.'-]*$|^&$|^and$/i.test(bare) || /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|investment|investor|rental)$/i.test(bare) || (US_STATES.includes(bare.toUpperCase()) && keep.length >= 2)) break;
       keep.push(bare); if (/[,;]$/.test(w)) break;
     }
     while (keep.length && /^(and|&)$/i.test(keep[keep.length - 1])) keep.pop();
@@ -1203,6 +1240,12 @@ function quickDraft(text) {
   if (/\bwait(ing)?\b|cost of waiting/i.test(text)) { addCalc("cow", refi ? { mode: "refi" } : null, true); added.push("cost of waiting"); }
   if (rent) { addCalc("rvb", { rent }, true); added.push("rent vs buy"); }
   if (income || /\bafford/i.test(text)) { addCalc("aff", income ? { income } : null, true); added.push("affordability"); }
+  if (/\bdebts?\b|consolidat/i.test(text)) { addCalc("debt", null, true); added.push("debt consolidation"); }
+  if (/\bextra\b|pay ?off (early|faster|sooner)/i.test(text)) { addCalc("amort", null, true); added.push("extra payments"); }
+  if (/\barm\b|adjustable/i.test(text)) { addCalc("arm", null, true); added.push("ARM vs fixed"); }
+  if (/over ?ask|\bbid\b/i.test(text)) { addCalc("equity", { mode: "bid" }, true); added.push("bid over asking"); }
+  else if (/\bequity\b|apprec/i.test(text)) { addCalc("equity", null, true); added.push("equity & appreciation"); }
+  if (/\binvest(ment|or)?\b|\brental\b/i.test(text)) { addCalc("invest", null, true); added.push("investment property"); }
   if (added.length) drawTabs();
   const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
