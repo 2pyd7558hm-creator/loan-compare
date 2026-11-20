@@ -731,31 +731,31 @@ const CASH = {
   label: "Cost of paying cash", tag: "Cost of paying cash",
   title: () => "Paying cash vs financing",
   intro: () => "Paying cash avoids interest, but it isn't free: moving the money can trigger taxes, penalties and fees, and the money stops growing once it's in the house. This puts both sides next to each other.",
-  note: "Cost of paying cash is an estimate. It assumes the money would otherwise earn the return shown every year, that monthly payments you'd skip by paying cash would be invested at that return, and that taxes on investments and retirement withdrawals are paid from the account. Taxes, penalties and deductions depend on your situation, so please talk with your tax advisor or financial planner before moving money.",
+  note: "Closing costs paying cash are the title, closing and recording fees and deed tax from the Xpert Purchase fee template (no lender fees). Cost of paying cash is an estimate. It assumes the money would otherwise earn the return shown every year, that monthly payments you'd skip by paying cash would be invested at that return, and that taxes on investments and retirement withdrawals are paid from the account. Taxes, penalties and deductions depend on your situation, so please talk with your tax advisor or financial planner before moving money.",
   blank: (b) => ({ price: b.price || 450000, downPct: b.downPct ?? 20, rate: b.rate || 6.5, term: b.term || 30,
-    closing: b.closing ?? Math.round((b.price || 450000) * 0.02 / 100) * 100,
-    liquid: null, inv: 0, gainPct: 40, cgRate: 15, ret: 0, incRate: 22, under59: 1, fees: 0, ret_r: 6, deduct: 0, years: 10 }),
+    closing: b.closing ?? Math.round((b.price || 450000) * 0.02 / 100) * 100, cashClose: b.cashClose ?? Math.round((b.price || 450000) * 0.004 / 10) * 10,
+    liquid: null, finSrc: 0, inv: 0, gainPct: 40, cgRate: 15, ret: 0, incRate: 22, under59: 1, fees: 0, ret_r: 6, deduct: 0, years: 10 }),
   mount(sec, d, changed) {
     // Step-by-step questions for the loan officer to walk through with the client (hidden on the client's link)
     const STEPS = [
-      { h: "How much do you have in savings and checking?", p: () => `Paying cash means covering the full ${usd.format(+d.price || 0)} price. Start with money that's already in the bank, since it costs nothing to move.`,
+      { h: "How much do you have in savings and checking?", p: () => `Paying cash means covering the full ${usd.format(+d.price || 0)} price plus about ${usd.format(+d.cashClose || 0)} in closing costs. Start with money that's already in the bank, since it costs nothing to move.`,
         f: numIn("Savings and checking you could use", "liquid", d, { pre: "$", step: 1000 }) },
-      { h: "Would any come from investments?", p: () => "Money in a brokerage account. Selling it can mean capital gains tax on the part that's growth.",
+      { h: "Would any come from investments?", opt: true, p: () => "Money in a brokerage account. Selling it can mean capital gains tax on the part that's growth.",
         f: numIn("From investments (brokerage)", "inv", d, { pre: "$", step: 1000 }) + numIn("Part of that which is gains", "gainPct", d, { suf: "%", step: 5 }) + numIn("Capital gains tax rate", "cgRate", d, { suf: "%", step: 1 }) },
-      { h: "Would any come from retirement?", p: () => "401k or IRA money is taxed as income when it comes out, and before age 59½ there's usually a 10% penalty too.",
+      { h: "Would any come from retirement?", opt: true, p: () => "401k or IRA money is taxed as income when it comes out, and before age 59½ there's usually a 10% penalty too.",
         f: numIn("From retirement (401k, IRA)", "ret", d, { pre: "$", step: 1000 }) + selIn("Under 59½?", "under59", d, [[1, "Yes (10% penalty)"], [0, "No"]]) + numIn("Income tax rate on withdrawals", "incRate", d, { suf: "%", step: 1 }) },
-      { h: "Is there a penalty to withdraw it?", p: () => "For example a CD's early withdrawal penalty, an annuity surrender charge, or account fees. Leave it at $0 if there isn't one.",
+      { h: "Is there a penalty to withdraw it?", opt: true, p: () => "For example a CD's early withdrawal penalty, an annuity surrender charge, or account fees. Leave it at $0 if there isn't one.",
         f: numIn("Other fees or penalties", "fees", d, { pre: "$", step: 100 }) },
       { h: "What would that money earn if it stays invested?", p: () => "6% a year is a good standard estimate for a long-term mix of investments. Use less for savings or CDs.",
         f: numIn("Expected return", "ret_r", d, { suf: "% / yr", step: 0.5 }) },
     ];
-    let step = 0;
+    let step = 0, covered = false, showStep = null;
     sec.innerHTML = `
       <div class="cash-steps" id="csBox"${d.stepsDone ? " hidden" : ""}>
         <div class="cs-top"><span><b>Let's compare</b> · <span id="csN"></span></span><button type="button" class="btn link" id="csSkip">Show all the fields instead</button></div>
-        ${STEPS.map((x, i) => `<div class="cs-q" data-step="${i}"${i ? " hidden" : ""}><h3>${x.h}</h3><p class="cs-p"></p><div class="fields">${x.f}</div></div>`).join("")}
+        ${STEPS.map((x, i) => `<div class="cs-q" data-step="${i}"${i ? " hidden" : ""}><h3>${x.h}<span class="cs-optl" hidden> (optional)</span></h3><p class="cs-p"></p><div class="fields">${x.f}</div></div>`).join("")}
         <p class="cs-cover" id="csCover"></p>
-        <div class="cs-nav"><button type="button" class="btn" id="csBack">Back</button><button type="button" class="btn primary" id="csNext">Next</button></div>
+        <div class="cs-nav"><button type="button" class="btn" id="csBack">Back</button><button type="button" class="btn primary" id="csNext">Next</button><button type="button" class="btn" id="csMore" hidden>Answer the optional questions</button></div>
       </div>
       <p class="cs-open"${d.stepsDone ? "" : " hidden"}><button type="button" class="btn link" id="csOpen">Walk through the questions</button></p>
       <div class="calc-head"><h2>The home and the loan</h2></div>
@@ -765,7 +765,9 @@ const CASH = {
         ${numIn("Interest rate", "rate", d, { suf: "%", step: 0.125 })}
         ${selIn("Term", "term", d, [[30, "30 years"], [20, "20 years"], [15, "15 years"]])}
         ${numIn("Loan closing costs", "closing", d, { pre: "$", step: 100 })}
+        ${numIn("Closing costs paying cash", "cashClose", d, { pre: "$", step: 50 })}
         ${numIn("Tax savings on interest", "deduct", d, { suf: "% if you itemize", step: 1 })}
+        ${selIn("Down payment if financing comes from", "finSrc", d, [[0, "Cash on hand, sale proceeds or gift"], [1, "The same accounts listed below"]])}
       </div>
       <div class="calc-head"><h2>Where the cash would come from</h2></div>
       <div class="panel fields calc-in">
@@ -784,6 +786,7 @@ const CASH = {
       <div class="highlights" id="cashHl"></div>
       <p class="verdict" id="cashSay"></p>
       <div class="table-wrap"><table id="cashTable"></table></div>
+      <p class="calc-note-sm" id="cashHow"></p>
       <div class="charts one"><div class="chart"><h3>Total cost over time</h3><p>What each choice has cost you by each year, counting taxes, fees, interest and the growth given up.</p><div id="cashChart"></div>
         <div class="legend"><span><i style="background:var(--s4)"></i>Paying cash</span><span><i style="background:var(--s1)"></i>Financing</span></div></div></div>`;
     const compute = () => {
@@ -799,7 +802,11 @@ const CASH = {
         const ig = invTax < 1 ? i / (1 - invTax) : i, rg = retTax + pen < 1 ? r / (1 - retTax - pen) : r;
         return { gross: s + ig + rg + fee, tax: ig - i + (rg - r) * (retTax / ((retTax + pen) || 1)), pen: (rg - r) * (pen / ((retTax + pen) || 1)), fee };
       };
-      const c = pull(P, +d.fees || 0), f = pull(Math.min(D + CC, P + CC), 0);
+      const CCc = +d.cashClose || 0;
+      const c = pull(P + CCc, +d.fees || 0);
+      // Financing: the down payment and closing costs usually come from cash on hand (bank, home sale proceeds, a gift or a seller credit),
+      // so nothing has to be sold. "From the same accounts" takes them from the accounts above instead, with any tax that brings.
+      const f = +d.finSrc ? pull(Math.min(D + CC, P + CC), 0) : { gross: Math.min(D + CC, P + CC), tax: 0, pen: 0, fee: 0 };
       const g = Math.pow(1 + (+d.ret_r || 0) / 100, 1 / 12) - 1, t = (+d.deduct || 0) / 100, pi = pmt(L, d.rate, d.term), n = d.term * 12, rm = d.rate / 1200;
       const cashV = [], finV = [], rows = [];
       let bal = L, fvPay = 0, paid = 0, intSum = 0, taxSave = 0;
@@ -814,22 +821,25 @@ const CASH = {
       }
       const h = d.years * 12, x = rows[0], costC = cashV[h], costF = finV[h], diff = costC - costF;
       const neg = (v) => (v < 0 ? "−" : "") + usd.format(Math.abs(v));
-      const have = sav + inv + ret, short = P - have;
+      const have = sav + inv + ret, short = P + CCc - have;
       sec.querySelector("#cashSav").textContent = known
-        ? (short > 0.5 ? `Savings, investments and retirement add up to ${usd.format(have)}, ${usd.format(short)} short of the ${usd.format(P)} price. The math treats the rest as coming from savings.` : "")
+        ? (short > 0.5 ? `Savings, investments and retirement add up to ${usd.format(have)}, ${usd.format(short)} short of the ${usd.format(P + CCc)} needed. The math treats the rest as coming from savings.` : "")
         : (P - inv - ret > 0 ? `The other ${usd.format(P - inv - ret)} comes from savings, with no tax or penalty to move it.` : "");
       const cov = sec.querySelector("#csCover");
-      cov.textContent = !known && !inv && !ret ? "" : short > 0.5 ? `So far: ${usd.format(have)} of the ${usd.format(P)} price, ${usd.format(short)} short.` : `That covers the ${usd.format(P)} price${have - P > 0.5 ? `, with ${usd.format(have - P)} to spare` : ""}.`;
-      cov.classList.toggle("short", short > 0.5 && (known || inv || ret));
+      covered = short <= 0.5;
+      cov.textContent = short > 0.5 ? `Still needed: ${usd.format(short)} of the ${usd.format(P + CCc)} (price plus closing costs).` : `Covered: ${usd.format(have)} for the ${usd.format(P + CCc)} needed${have - P - CCc > 0.5 ? `, with ${usd.format(have - P - CCc)} to spare` : ""}. The other questions are optional.`;
+      cov.classList.toggle("short", short > 0.5); cov.classList.toggle("ok", short <= 0.5);
+      sec.querySelectorAll(".cs-q").forEach((q) => { q.querySelector(".cs-optl").hidden = !(covered && STEPS[+q.dataset.step].opt); });
+      if (typeof showStep === "function") showStep();
       sec.querySelectorAll(".cs-p").forEach((el, i) => { el.textContent = STEPS[i].p(); });
       // The same number can be in a question and in the full form: keep both showing it
       sec.querySelectorAll("[data-k]").forEach((el) => { if (el !== document.activeElement && el.dataset.row === undefined && d[el.dataset.k] !== undefined && String(el.value) !== String(d[el.dataset.k] ?? "")) el.value = d[el.dataset.k] ?? ""; });
       sec.querySelector("#cashH").textContent = `Over ${d.years} years`;
       sec.querySelector("#cashHl").innerHTML =
-        hlBox("Cost of paying cash", neg(costC), `${usd.format(c.gross - P)} to move the money + ${usd.format(c.gross * (x.grow - 1))} growth given up`, diff > 0 ? "" : "good") +
+        hlBox("Cost of paying cash", neg(costC), `${usd.format(c.gross - P)} closing costs, taxes and fees + ${usd.format(c.gross * (x.grow - 1))} growth given up`, diff > 0 ? "" : "good") +
         hlBox("Cost of financing", neg(costF), `interest, closing costs and growth given up`, diff > 0 ? "good" : "") +
         hlBox(diff > 0 ? "Financing saves" : "Paying cash saves", usd.format(Math.abs(diff)), `over ${d.years} years`) +
-        hlBox("Kept invested by financing", usd.format(Math.max(0, c.gross - f.gross)), `instead of going into the house`);
+        hlBox("Stays invested by financing", usd.format(Math.max(0, c.gross - f.gross)), `and keeps growing at ${pct(+d.ret_r || 0, 2)} a year`);
       const pctS = (v) => pct(v, 2);
       sec.querySelector("#cashSay").innerHTML = Math.abs(diff) < 1000
         ? `Over ${d.years} years the two come out about even, so it comes down to how much you value having the cash on hand.`
@@ -839,33 +849,34 @@ const CASH = {
       const row = (l, a, b, cls = "") => `<tr class="${cls}"><td>${l}</td><td>${a}</td><td>${b}</td></tr>`;
       const dash = "–", m0 = (v) => v > 0.5 ? usd.format(v) : dash;
       sec.querySelector("#cashTable").innerHTML = `<thead><tr><th></th><th>Pay cash</th><th>Finance ${pct(+d.downPct || 0)} down</th></tr></thead><tbody>
-        ${row("Cash out of your accounts", usd.format(c.gross), usd.format(f.gross))}
-        ${row("Taxes to move the money", m0(c.tax), m0(f.tax))}
-        ${row("Early withdrawal penalty", m0(c.pen), m0(f.pen))}
-        ${row("Other fees or penalties", m0(c.fee), dash)}
-        ${row("Loan closing costs", dash, m0(CC))}
-        ${row(`Growth given up on that cash, ${d.years} yrs`, usd.format(c.gross * (x.grow - 1)), usd.format(f.gross * (x.grow - 1)))}
-        ${row(`Interest paid, ${d.years} yrs`, dash, m0(x.intSum))}
-        ${t ? row("Less tax savings on interest", dash, "−" + usd.format(x.taxSave)) : ""}
-        ${row("Growth the payments could have earned", dash, m0(x.fvPay - x.paid))}
+        ${row("Money out of your accounts at closing", usd.format(c.gross), usd.format(f.gross))}
+        ${row("Closing costs", m0(CCc) + (CCc ? "<br><small>title, recording, deed tax</small>" : ""), m0(CC) + (CC ? "<br><small>lender, title, recording</small>" : ""))}
+        ${row("Taxes, penalties and fees to get the money out", m0(c.tax + c.pen + c.fee), m0(f.tax + f.pen) + (+d.finSrc ? "" : "<br><small>from cash on hand</small>"))}
+        ${row(`Interest paid, ${d.years} yrs` + (t ? ", less tax savings" : ""), dash, m0(x.intSum - x.taxSave))}
+        ${row(`Investment growth given up, ${d.years} yrs`, usd.format(c.gross * (x.grow - 1)) + "<br><small>on everything put into the house</small>", usd.format(f.gross * (x.grow - 1) + x.fvPay - x.paid) + "<br><small>on the down payment, closing costs and payments</small>")}
         ${row(`Total cost over ${d.years} years`, neg(costC), neg(costF), "strong")}
         ${row("Monthly principal and interest", dash, usd.format(pi))}
         ${row(`Loan balance at ${d.years} yrs`, dash, usd.format(x.bal))}</tbody>`;
+      sec.querySelector("#cashHow").textContent = `Both sides start with the same money. Paying cash puts ${usd.format(c.gross)} into the house, so all of it stops growing. Financing puts in ${usd.format(f.gross)} and leaves ${usd.format(Math.max(0, c.gross - f.gross))} invested and growing; it pays interest instead.`;
       [...sec.querySelectorAll("#cashTable tbody tr.strong td")].slice(1).forEach((td, i) => { if ((i ? costF : costC) === Math.min(costC, costF)) td.classList.add("best"); });
       lineChart(sec.querySelector("#cashChart"), [{ color: "--s4", values: cashV }, { color: "--s1", values: finV }], h);
     };
     wireCalc(sec, d, compute, changed);
-    const showStep = () => {
+    showStep = () => {
       sec.querySelectorAll(".cs-q").forEach((q) => { q.hidden = +q.dataset.step !== step; });
       sec.querySelector("#csN").textContent = `question ${step + 1} of ${STEPS.length}`;
       sec.querySelector("#csBack").hidden = step === 0;
-      sec.querySelector("#csNext").textContent = step === STEPS.length - 1 ? "See the comparison" : "Next";
+      const skip = covered && step < STEPS.length - 1 && STEPS.slice(step + 1, -1).every((x) => x.opt);
+      sec.querySelector("#csNext").textContent = step === STEPS.length - 1 ? "See the comparison" : skip && step < STEPS.length - 2 ? "Next: expected return" : "Next";
+      sec.querySelector("#csMore").hidden = !(skip && step < STEPS.length - 2);
     };
     const done = (scroll) => {
       d.stepsDone = true; sec.querySelector("#csBox").hidden = true; sec.querySelector(".cs-open").hidden = false; changed();
       if (scroll) sec.querySelector("#cashH").scrollIntoView({ behavior: "smooth", block: "start" });
     };
-    sec.querySelector("#csNext").addEventListener("click", () => { if (step < STEPS.length - 1) { step++; showStep(); const f = sec.querySelector(`.cs-q[data-step="${step}"] input`); if (f) f.focus(); } else done(true); });
+    const go = (to) => { step = to; showStep(); const f = sec.querySelector(`.cs-q[data-step="${step}"] input`); if (f) f.focus(); };
+    sec.querySelector("#csMore").addEventListener("click", () => go(step + 1));
+    sec.querySelector("#csNext").addEventListener("click", () => { if (covered && step < STEPS.length - 2 && STEPS.slice(step + 1, -1).every((x) => x.opt)) { go(STEPS.length - 1); return; } if (step < STEPS.length - 1) { step++; showStep(); const f = sec.querySelector(`.cs-q[data-step="${step}"] input`); if (f) f.focus(); } else done(true); });
     sec.querySelector("#csBack").addEventListener("click", () => { if (step > 0) { step--; showStep(); } });
     sec.querySelector("#csSkip").addEventListener("click", () => done(false));
     sec.querySelector("#csOpen").addEventListener("click", () => { d.stepsDone = false; step = 0; showStep(); sec.querySelector("#csBox").hidden = false; sec.querySelector(".cs-open").hidden = true; changed(); });
