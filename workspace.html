@@ -98,6 +98,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .seg-label { font-size: 13px; color: var(--muted); margin-right: 8px }
 
 .highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 14px }
+.verdict { margin: 0 0 16px; font-size: 16px; line-height: 1.5; max-width: 72ch }
 .hl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px }
 .hl .k { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600 }
 .hl .v { font-family: var(--font-display); font-size: 20px; font-weight: 600; margin-top: 4px; display: flex; align-items: center; gap: 8px }
@@ -489,6 +490,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
   <section id="armSec" class="calc-pane" hidden></section>
   <section id="equitySec" class="calc-pane" hidden></section>
   <section id="investSec" class="calc-pane" hidden></section>
+  <section id="cashSec" class="calc-pane" hidden></section>
 
   <footer class="disclosure">
     <p><strong>Disclaimer.</strong> Information and interactive calculators are made available to you as self-help tools for your independent use and are not intended to provide investment advice. We cannot and do not guarantee their applicability or accuracy in regards to your individual circumstances. All examples are hypothetical and are for illustrative purposes. We encourage you to seek personalized advice from qualified professionals regarding all personal finance issues.</p>
@@ -1224,6 +1226,8 @@ const OPT_WORD = /\b(conv|conventional|fha|va|points?|pts?|down|yr|year|years|fi
 // ("2 extra payments a year" or "2 scenarios" are not options.)
 const OPT_FEATURE = /\barm\b|\d\s*%|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b|\b(?:conv|conventional|fha|va)\b|\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b|\bbuy ?down\b|\b(?:no|zero)\s+down\b/i;
 const OPT_COUNT = /\b(\d|two|three|four)\s+(?:scenarios|options|loans|loan options)\b/i;
+// "paying cash", "all cash", "cash purchase": adds the Cost of paying cash tab and isn't a loan option
+const CASH_RE = /\b(?:pay(?:ing)?|paid)\s+(?:all\s+)?cash\b|\bcash\s+(?:purchase|buyer|offer)\b|\ball[- ]cash\b/i;
 function optionSpecs(text) {
   // Break the text into short phrases: sentences, commas (not inside $450,000), " - ", "vs", "then"
   const SPLIT = /(?<!\d)\.(?!\d)|[;\n]|,(?!\d{3})|\s[-–—]\s|\s+then\s+/i, VS = /\s+(?:vs\.?|versus|compared (?:to|with))\s+/i;
@@ -1354,7 +1358,7 @@ function quickDraft(text) {
   if (!county) { const cm = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+County\b/); if (cm) county = cm[1]; }
   file.county = county || undefined; file.st = st || undefined;
   // Use the options exactly as typed when there are at least two; otherwise fall back to a common comparison
-  const specs = optionSpecs(text);
+  const specs = optionSpecs(text.replace(CASH_RE, " "));
   let optText, guessed = false;
   const overLimit = [];
   if (specs.length >= 2) {
@@ -1410,6 +1414,12 @@ function quickDraft(text) {
   if (/over ?ask|\bbid\b/i.test(text)) { addCalc("equity", { mode: "bid" }, true); added.push("bid over asking"); }
   else if (/\bequity\b|apprec/i.test(text)) { addCalc("equity", null, true); added.push("equity & appreciation"); }
   if (/\binvest(ment|or)?\b|\brental\b/i.test(text)) { addCalc("invest", null, true); added.push("investment property"); }
+  if (CASH_RE.test(text)) {
+    // Compare paying cash with the first financed option
+    // Compare with the one financed option typed ("paying cash vs 20% down at 6.5%"), else the first option
+    const s0 = specs.length === 1 ? { ...state.scenarios[0], ...parseOption(specs[0], { ...state.scenarios[0] }).s } : state.scenarios[0], a = analyze(s0);
+    addCalc("cash", { downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other) }, true); added.push("cost of paying cash");
+  }
   if (added.length) drawTabs();
   const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
   const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
@@ -1739,7 +1749,7 @@ function clientMessage() {
   const shared = file.calcs.filter(isShared);
   // Name each calculator the client can open, once each, in tab order: "the Loan Comparison and the Cost of Waiting"
   const NAMES = { compare: "Loan Comparison", cow: "Cost of Waiting", rvb: "Rent vs Buy", aff: "Affordability", debt: "Debt Consolidation",
-    amort: "Extra Payments", arm: "ARM vs Fixed", equity: "Equity & Appreciation", invest: "Investment Property" };
+    amort: "Extra Payments", arm: "ARM vs Fixed", equity: "Equity & Appreciation", invest: "Investment Property", cash: "Cost of Paying Cash" };
   const names = [...new Set(shared.map((c) => c.kind === "equity" && c.data && c.data.mode === "bid" ? "Bid Over Asking" : NAMES[c.kind]).filter(Boolean))].map((n) => "the " + n);
   const see = names.length ? `You'll see ${joinList(names)}, which you can open any time with this private link:` : "You can open them any time with this private link:";
   const sum = compareSummary(false);
