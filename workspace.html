@@ -220,6 +220,9 @@ table.fees { min-width: 640px }
 #feeTable .fee-amt { width: 120px; margin-left: auto }
 #feeTable .fee-amt input { text-align: right }
 #feeTable .fee-nm { color: var(--fg); font-size: 14px }
+.fee-split { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap }
+table.fees .fee-split input[type=number] { width: 64px; padding: 3px 6px }
+table.fees .fee-split select { padding: 3px 4px }
 #feeTable .fee-why { font-size: 12px; color: var(--muted); margin-top: 2px }
 #feeTable .fee-why .btn.link { font-size: 12px; padding: 0; min-height: 0 }
 table.fees td, table.fees th { padding: 6px 8px; vertical-align: middle }
@@ -773,7 +776,22 @@ function analyze(s) {
 // The insurance premium (1 year) and the tax and insurance reserves always follow the taxes and insurance above:
 // 3 months of each on a purchase, 6 on a refinance. Typing an amount in the fee table overrides it.
 // State deed tax stamps follow the state's rule (Colorado: $0.01 per $100 of the price, purchases only) unless typed over.
-const STAMP_PCT = { CO: 0.01 };
+// Transfer tax rules by state. NH: $0.75 per $100 from the buyer and $0.75 from the seller ($20 minimum each), per the NH DRA.
+const STAMP_RULE = { CO: { pct: 0.01, min: 0, note: "$0.01 per $100 of the price" }, NH: { pct: 1.5, min: 40, split: 50, note: "$0.75 per $100 each from buyer and seller" } };
+const STAMP_PCT = Object.fromEntries(Object.entries(STAMP_RULE).map(([k, v]) => [k, v.pct]));
+// Who pays a fee: borrower, seller, lender, or split (the borrower pays split% or $split, the seller the rest)
+function feeShares(it, a) {
+  if (it.by === "S") return { b: 0, s: a, l: 0 };
+  if (it.by === "L") return { b: 0, s: 0, l: a };
+  if (it.by === "X") { const v = +it.split || 0, b = it.splitBy === "$" ? Math.min(a, v) : a * Math.min(100, v) / 100; return { b, s: a - b, l: 0 }; }
+  return { b: a, s: 0, l: 0 };
+}
+// Template rules that follow the state: NH's transfer tax is split between buyer and seller
+function normFeeItems(items, st) {
+  const r = STAMP_RULE[(st || "").toUpperCase()];
+  for (const it of items) if (r && r.split && /deed|transfer|stamp|documentary/i.test(it.name) && it.auto !== false && it.by !== "X") { it.by = "X"; it.split = r.split; it.splitBy = "%"; }
+  return items;
+}
 function feeState() {
   const t = feeTemplates.find((x) => x.name === (state.closing && state.closing.template));
   let st = null; try { st = file.st; } catch (e) { /* the file isn't set up yet while the page loads */ }
@@ -786,7 +804,8 @@ function feeAmount(it, loan) {
   const base = isStamp ? state.price : loan;
   let a = (+it.amt || 0) + base * (+it.pct || 0) / 100, est = false, note = "";
   if (it.auto !== false) {
-    if (isStamp && STAMP_PCT[feeState()] !== undefined) { a = isRefiFile() ? 0 : state.price * STAMP_PCT[feeState()] / 100; note = feeState() === "CO" ? "$0.01 per $100" : ""; }
+    if (isStamp && STAMP_RULE[feeState()]) { const r = STAMP_RULE[feeState()]; a = isRefiFile() ? 0 : Math.max(r.min, state.price * r.pct / 100); note = r.note; }
+    else if (/credit report/i.test(it.name) && (state.creditReports || 1) > 1) { a = (+it.amt || 0) * state.creditReports; note = `${state.creditReports} separate reports`; }
     else if (it.prepaid && /hazard.*premium|insurance premium/i.test(it.name)) { a = state.insurance; est = true; note = "1 yr"; }
     else if (it.prepaid && /hazard.*reserve|insurance reserve/i.test(it.name)) { a = state.insurance / 12 * reserveMonths(); est = true; note = reserveMonths() + " mo"; }
     else if (it.prepaid && /tax.*reserve/i.test(it.name)) { a = state.taxes / 12 * reserveMonths(); est = true; note = reserveMonths() + " mo"; }
@@ -797,8 +816,9 @@ function closingTotals(loan) {
   const t = { apr: 0, other: 0, prepaid: 0, seller: 0, lender: 0 };
   for (const it of (state.closing && state.closing.items) || []) {
     const { a } = feeAmount(it, loan);
-    if (it.by === "S") t.seller += a; else if (it.by === "L") t.lender += a;
-    else if (it.prepaid) t.prepaid += a; else if (it.apr) t.apr += a; else t.other += a;
+    const sh = feeShares(it, a);
+    t.seller += sh.s; t.lender += sh.l;
+    if (it.prepaid) t.prepaid += sh.b; else if (it.apr) t.apr += sh.b; else t.other += sh.b;
   }
   return t;
 }
@@ -1065,8 +1085,11 @@ const DEFAULT_FEE_TEMPLATES = [
   {"name":"NH Purchase","state":"NH","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":715,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":500,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.77,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Tax Service Fee (second line, check)","amt":195,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Premium","amt":1550.04,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Reserves","amt":258.34,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":648,"pct":0,"by":"B","apr":false,"prepaid":true}]}
 ];
 let feeTemplates = DEFAULT_FEE_TEMPLATES.slice();
+feeTemplates.forEach((t) => normFeeItems(t.items, t.state));
 const hasClosing = () => !!(state.closing && state.closing.items.length);
-const BY = [["B", "Borrower"], ["S", "Seller"], ["L", "Lender"]];
+const BY = [["B", "Borrower"], ["S", "Seller"], ["L", "Lender"], ["X", "Split"]];
+// "Borrower pays [50] [% | $]" under a Split fee; the seller pays the rest
+const splitBox = (it, attr) => it.by === "X" ? `<div class="fee-split">Borrower pays <input type="number" min="0" step="1" ${attr}="split" value="${+it.split || 0}" aria-label="Borrower's share"><select ${attr}="splitBy" aria-label="Share in percent or dollars"><option value="%"${it.splitBy !== "$" ? " selected" : ""}>%</option><option value="$"${it.splitBy === "$" ? " selected" : ""}>$</option></select>, seller the rest</div>` : "";
 const escAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 let feeRowsKey = "";
 function renderClosing(a) {
@@ -1090,7 +1113,7 @@ function renderClosing(a) {
     $("feeTable").innerHTML = `<thead><tr><th>Fee</th><th>Paid by</th><th class="num">Amount${state.scenarios.length > 1 ? " (option A)" : ""}</th><th class="staff-only"></th></tr></thead><tbody>` +
       items.map((it, i) => `<tr data-f="${i}">
         <td>${it.custom && !ro ? `<input type="text" data-k="name" value="${escAttr(it.name)}" aria-label="Fee name">` : `<span class="fee-nm">${escAttr(it.name)}</span>`}</td>
-        <td>${ro ? (BY.find(([v]) => v === it.by) || BY[0])[1] : `<select data-k="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select>`}</td>
+        <td>${ro ? (it.by === "X" ? "Split" : (BY.find(([v]) => v === it.by) || BY[0])[1]) : `<select data-k="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select>${splitBox(it, "data-k")}`}</td>
         <td class="num">${ro ? `<span data-amt></span>` : `<div class="affix pre fee-amt"><span>$</span><input type="number" min="0" step="1" data-k="over" aria-label="Amount for this loan"></div>`}<div class="fee-why" data-why></div></td>
         <td class="staff-only"><button class="icon-btn fee-x" type="button" data-del="${i}" aria-label="Remove fee">×</button></td>
       </tr>`).join("") + `</tbody>`;
@@ -1103,9 +1126,11 @@ function renderClosing(a) {
     if (out) out.textContent = usd.format(amt);
     const base = /deed|transfer|stamp|documentary/i.test(it.name) ? "price" : "loan";
     const why = it.custom ? "Added for this loan" : it.over ? `Changed for this loan${ro ? "" : ` · <button class="btn link" type="button" data-reset="${i}">Reset</button>`}`
-      : [note === "1 yr" ? "1 year of insurance" : /mo$/.test(note) ? `${note.replace(" mo", "")} months of ${/tax/i.test(it.name) ? "taxes" : "insurance"}` : note ? `${note} of the price` : +it.pct ? `${+it.amt ? usd.format(+it.amt) + " + " : ""}${+it.pct}% of the ${base}` : "",
+      : [note === "1 yr" ? "1 year of insurance" : /mo$/.test(note) ? `${note.replace(" mo", "")} months of ${/tax/i.test(it.name) ? "taxes" : "insurance"}` : note ? note : +it.pct ? `${+it.amt ? usd.format(+it.amt) + " + " : ""}${+it.pct}% of the ${base}` : "",
          est ? "estimate" : "", it.apr ? "in APR" : "", it.prepaid ? "prepaid" : ""].filter(Boolean).join(" · ");
-    tr.querySelector("[data-why]").innerHTML = why;
+    const sh = feeShares(it, amt);
+    const who = it.by === "X" ? `Borrower ${usd.format(sh.b)} · seller ${usd.format(sh.s)}` : it.by === "S" ? "seller pays" : it.by === "L" ? "lender pays" : "";
+    tr.querySelector("[data-why]").innerHTML = [who, why].filter(Boolean).join(" · ");
   });
   const t = closingTotals(loan);
   $("feeSum").innerHTML = `<span>Lender fees (in APR) <b>${usd.format(t.apr)}</b></span><span>Third-party fees <b>${usd.format(t.other)}</b></span><span>Prepaids &amp; escrow <b>${usd.format(t.prepaid)}</b></span>` +
@@ -1117,7 +1142,9 @@ $("feeTable").addEventListener("input", (e) => {
   const it = state.closing.items[+tr.dataset.f], k = t.dataset.k;
   // An amount typed here is this loan's figure: it replaces the template's rule (%, per $100, months) for this loan only
   if (k === "over") { it.amt = +t.value || 0; it.pct = 0; it.auto = false; it.over = true; render(); return; }
-  it[k] = (k === "name" || k === "by") ? t.value : (+t.value || 0);
+  it[k] = (k === "name" || k === "by" || k === "splitBy") ? t.value : (+t.value || 0);
+  if (k === "by" && t.value === "X" && it.split == null) { it.split = 50; it.splitBy = "%"; }
+  if (k === "by" || k === "splitBy") feeRowsKey = "";
   render();
 });
 $("feeTable").addEventListener("click", (e) => {
@@ -1156,7 +1183,7 @@ function applyDefaultTemplate(refi, condo) {
   if (t && (!state.closing || state.closing.template !== t.name)) { applyFeeTemplate(t); syncActive(); }
 }
 function applyFeeTemplate(t) {
-  state.closing = { template: t.name, items: JSON.parse(JSON.stringify(t.items)), open: false };
+  state.closing = { template: t.name, items: normFeeItems(JSON.parse(JSON.stringify(t.items)), t.state), open: false };
   state.scenarios.forEach((s) => s.fees = 0); // the template now carries the lender fees
   feeRowsKey = ""; renderCards(); render();
   say("feeStatus", `Filled in from “${t.name}”. Edit any fee for this client; the template itself doesn't change.`);
@@ -1392,6 +1419,7 @@ async function loadFeeTemplates() {
   const { data, error } = await sb.from("fee_templates").select("id, name, state, items").order("state").order("name");
   if (error || !data || !data.length) { tplFromDb = !error && !!data; feeTemplates = DEFAULT_FEE_TEMPLATES.slice(); }
   else { tplFromDb = true; feeTemplates = data; }
+  feeTemplates.forEach((t) => normFeeItems(t.items, t.state));
   fillFeeTemplateSelect();
   if (!$("tplManageBox").hidden && !tplEdit) { drawTplList(); if (tplFromDb) say("tplManageStatus", ""); }
   if (!current && !(state.closing && state.closing.template)) applyDefaultTemplate();
@@ -1445,7 +1473,7 @@ function tplEditor(i) {
       <td><input type="text" data-ik="name" value="${escAttr(it.name)}" aria-label="Fee name">${AUTO_FEE.test(it.name) && it.auto !== false && (it.prepaid || STAMP_PCT[(e.state || "").toUpperCase()] !== undefined) ? `<span class="tax-hint">Figured automatically. Type an amount to override.</span>` : ""}</td>
       <td><div class="affix pre"><span>$</span><input type="number" min="0" step="1" data-ik="amt" value="${+it.amt || 0}" aria-label="Amount"></div></td>
       <td><input class="pct" type="number" min="0" step="0.001" data-ik="pct" value="${+it.pct || 0}" aria-label="Percent"></td>
-      <td><select data-ik="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select></td>
+      <td><select data-ik="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select>${splitBox(it, "data-ik")}</td>
       <td><input type="checkbox" data-ik="apr"${it.apr ? " checked" : ""} aria-label="Counts toward APR"></td>
       <td><input type="checkbox" data-ik="prepaid"${it.prepaid ? " checked" : ""} aria-label="Prepaid or escrow"></td>
       <td><button class="icon-btn fee-x" type="button" data-tdel="${j}" aria-label="Remove fee">×</button></td></tr>`).join("")}</tbody></table></div>
@@ -1461,8 +1489,9 @@ $("tplList").addEventListener("input", (e) => {
   if (t.dataset.tk) { tplEdit[t.dataset.tk] = t.value; return; }
   const tr = t.closest("tr[data-ti]"); if (!tr || !t.dataset.ik) return;
   const it = tplEdit.items[+tr.dataset.ti], k = t.dataset.ik;
-  it[k] = t.type === "checkbox" ? t.checked : (k === "name" || k === "by") ? t.value : (+t.value || 0);
+  it[k] = t.type === "checkbox" ? t.checked : (k === "name" || k === "by" || k === "splitBy") ? t.value : (+t.value || 0);
   if (k === "amt" || k === "pct") it.auto = false;
+  if (k === "by") { if (t.value === "X" && it.split == null) { it.split = 50; it.splitBy = "%"; } drawTplList(); }
 });
 $("tplList").addEventListener("click", async (e) => {
   const ed = e.target.closest("[data-edit]");
@@ -1664,6 +1693,7 @@ function quickDraft(text, ai) {
   else if (/\bdown\b/.test(low)) preset = "down";
   // Start a fresh comparison, then fill it in
   newComparison();
+  state.creditReports = creditReportsFrom(text, ai ? ai.raw : "");
   draftInfo = { guessed: [], noPrice: !price, overLimit: 0 };
   if (name) $("cName").value = name;
   $("cTitle").value = (refi ? "Refinance options" : "Purchase options") + (addr ? ", " + addr : "");
@@ -1739,7 +1769,7 @@ function quickDraft(text, ai) {
   const added = calcsFromNote(text, { refi, rent, income, extraYearN, extraMonth, specs });
   if (added.length) drawTabs();
   draftInfo.overLimit = overLimit.length;
-  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", ")];
+  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", "), state.creditReports > 1 && `credit report for ${state.creditReports} (the buyers aren't a couple, so each gets a report)`];
   const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
   autoTitle();
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
@@ -1774,13 +1804,24 @@ function setRefiLoan(loan) {
   });
   return down;
 }
+// Separate credit reports: one for a borrower or a married/partnered couple (joint report), one more for each co-borrower who isn't
+// a spouse or partner ("me and my mom", "two brothers", "my friend and I"). A parent giving gift money isn't a borrower.
+const COBUYER = String.raw`(?:mom|mother|dad|father|brother|sister|son|daughter|friend|cousin|aunt|uncle|grand(?:ma|pa|mother|father)|roommate|business partner|co-?worker|boss|niece|nephew)`;
+function creditReportsFrom(text, raw) {
+  const m = String(text).match(/\bcredit reports (\d)\b/i); if (m) return Math.max(1, Math.min(4, +m[1]));
+  if (raw) return 1; // the AI reader decided
+  const t = String(text);
+  const co = new RegExp(String.raw`\b(?:me|i)\s+and\s+my\s+` + COBUYER + String.raw`\b|\bmy\s+` + COBUYER + String.raw`\s+and\s+(?:i|me)\b|\b(?:buying|purchasing|buy|purchase)\s+with\s+(?:my|his|her|their)\s+` + COBUYER + String.raw`\b|\b` + COBUYER + String.raw`s?\s+(?:is|as|will be)\s+(?:a\s+)?co-?(?:borrower|signer|buyer)\b|\b(?:two|2)\s+(?:brothers|sisters|friends|siblings|cousins)\b|\bnon-occupant co-?borrower\b`, "i");
+  if (!co.test(t)) return 1;
+  return /\b(?:three|3)\s+(?:borrowers|buyers|of us)\b/i.test(t) ? 3 : 2;
+}
 // Closing costs a cash buyer still pays (title, closing and recording fees, deed tax), taken from the comparison's fee template.
 // A cash-purchase fee template will replace this later.
 function cashClosing() {
   let t = 0;
   for (const it of (state.closing && state.closing.items) || []) {
     if (it.prepaid || it.by === "S" || it.by === "L") continue;
-    if (/closing fee|settlement|escrow fee|recording|deed|transfer|stamp|owner'?s title|survey|inspection|attorney/i.test(it.name)) t += feeAmount(it, 0).a;
+    if (/closing fee|settlement|escrow fee|recording|deed|transfer|stamp|owner'?s title|survey|inspection|attorney/i.test(it.name)) t += feeShares(it, feeAmount(it, 0).a).b;
   }
   return Math.round(t);
 }
@@ -2155,7 +2196,7 @@ function applyAi(job, d) {
     d.jumbo_all ? "jumbo" : "", d.rent ? "rent " + n(d.rent) : "", d.income ? "income " + n(d.income) : "", d.cost_of_waiting ? "wait" : "", d.debts ? "debts" : "",
     d.extra_payments_per_year ? `${n(d.extra_payments_per_year)} extra payments a year` : d.extra_monthly ? `extra $${n(d.extra_monthly)} a month` : d.extra_payments ? "extra payments" : "",
     d.arm_vs_fixed || anyArm ? "ARM" : "", d.bid_over_asking ? "over asking" : "", d.equity ? "equity" : "", d.investment ? "investment" : "", d.paying_cash ? "paying cash" : "",
-    d.seller_credit_all ? "seller credit $" + n(d.seller_credit_all) : "", d.dpa_amount ? `DPA $${n(d.dpa_amount)}${d.dpa_rate ? ` at ${d.dpa_rate}%` : ""}` : ""];
+    d.seller_credit_all ? "seller credit $" + n(d.seller_credit_all) : "", d.credit_reports > 1 ? `credit reports ${Math.round(d.credit_reports)}` : "", d.dpa_amount ? `DPA $${n(d.dpa_amount)}${d.dpa_rate ? ` at ${d.dpa_rate}%` : ""}` : ""];
   quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4), raw: job.note });
   const notes = (d.assumptions || []).filter(Boolean);
   if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
