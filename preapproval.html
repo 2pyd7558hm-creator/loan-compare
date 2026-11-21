@@ -171,7 +171,7 @@ details summary { cursor: pointer; font-family: var(--display); font-weight: 700
       <h2 id="appH">Approved borrowers</h2>
       <button class="ghost" id="newB">Add approved borrower</button>
     </div>
-    <p class="sub" style="font-size:.88rem">Borrowers sent from Surefire show up here to confirm. Anyone else, add by hand when the pre-approval is issued in ARIVE. These limits are what every letter is checked against.</p>
+    <p class="sub" style="font-size:.88rem">Borrowers sent from Arrive or Surefire show up here to confirm. Anyone else, add by hand when the pre-approval is issued in ARIVE. These limits are what every letter is checked against.</p>
     <div class="banner" id="sfPending" hidden></div>
     <form id="bForm" hidden style="display:grid; gap:12px">
       <div class="banner" id="sfNote" hidden></div>
@@ -302,7 +302,7 @@ function evaluate() {
   $("fLtv").textContent = isFinite(c.ltv) && c.loan > 0 ? c.ltv.toFixed(2) + "%" : "—";
   $("fProg").textContent = b ? b.loanType : "—";
 
-  if (b && b.needsReview) add(false, "This borrower came from Surefire. Tap Review on their row, check the limits, and confirm before making a letter.");
+  if (b && b.needsReview) add(false, "This borrower was sent over automatically. Tap Review on their row, check the limits, and confirm before making a letter.");
   if (b && c.price > 0 && c.loan > 0) {
     add(c.price <= b.maxPrice, `Price ${money0(c.price)} ${c.price <= b.maxPrice ? "is within" : "is over"} the approved max of ${money0(b.maxPrice)}`);
     add(c.loan <= b.maxLoan, `Loan ${money0(c.loan)} ${c.loan <= b.maxLoan ? "is within" : "is over"} the approved max of ${money0(b.maxLoan)}`);
@@ -411,7 +411,7 @@ function openForm(b) {
   $("bSave").textContent = b?.needsReview ? "Confirm limits" : b ? "Save changes" : "Save borrower";
   const sf = b?.surefire;
   $("sfNote").hidden = !b?.needsReview;
-  if (b?.needsReview) $("sfNote").textContent = "From Surefire" + (sf?.receivedAt ? " on " + new Date(sf.receivedAt).toLocaleDateString() : "") +
+  if (b?.needsReview) $("sfNote").textContent = (b.source === "arive" ? "From Arrive" : "From Surefire") + (sf?.receivedAt ? " on " + new Date(sf.receivedAt).toLocaleDateString() : "") +
     (sf?.loanStatus ? ". Loan status: " + sf.loanStatus : "") + (sf?.buyingAgent ? ". Agent: " + sf.buyingAgent : "") +
     ". Check every limit against the approval in Arrive and set the approval expiration before confirming.";
   $("bName").focus();
@@ -452,7 +452,7 @@ function renderBorrowers() {
     <td>${b.needsReview ? `<button class="tbtn" data-edit="${esc(b.id)}">Review</button>` : `<button class="tbtn" data-use="${esc(b.id)}">Use</button> · <button class="tbtn" data-edit="${esc(b.id)}">Edit</button>`}</td></tr>`).join("");
   const pending = borrowers.filter(b => b.needsReview).length;
   $("sfPending").hidden = !pending;
-  $("sfPending").textContent = pending === 1 ? "1 borrower from Surefire needs their limits confirmed." : `${pending} borrowers from Surefire need their limits confirmed.`;
+  $("sfPending").textContent = pending === 1 ? "1 imported borrower needs their limits confirmed." : `${pending} imported borrowers need their limits confirmed.`;
   $("bEmpty").hidden = borrowers.length > 0;
   $("bEmpty").textContent = "No approved borrowers yet. Add one when a pre-approval is issued in ARIVE.";
   evaluate();

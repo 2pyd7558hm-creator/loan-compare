@@ -1,5 +1,6 @@
 // Supabase Edge Function: surefire-preapproval
-// Receives Surefire's outbound contact webhook (CRM Settings > Webhooks) and adds or updates that borrower
+// Receives Surefire's outbound contact webhook (CRM Settings > Webhooks), and the Arive status Zap's
+// PREAPPROVED step (same field names, plus source "arive" and loanLOSGUID), and adds or updates that borrower
 // on the pre-approval letter desk (preapproval.html). Imported borrowers always arrive as "confirm limits":
 // staff must check the numbers and the expiration date before any letter can be made for them.
 //
@@ -71,21 +72,25 @@ Deno.serve(async (req) => {
   const contacts = (Array.isArray(body) ? body : [body]).filter((x) => x && typeof x === "object") as Record<string, unknown>[];
   const results = [];
   for (const c of contacts) {
-    const surefireId = str(c.id) || String(c.id ?? "");
-    if (!surefireId) { results.push({ skipped: "no contact id" }); continue; }
+    // Surefire sends its contact id; the Arive status Zap sends no id but the Arive loan GUID (loanLOSGUID)
+    const surefireId = c.id == null ? "" : String(c.id).trim();
+    const losGuid = str(c.loanLOSGUID);
+    if (!surefireId && !losGuid) { results.push({ skipped: "no contact id or loan GUID" }); continue; }
     const price = num(c.loanPurchasePrice) ?? num(c.loanPropertyValue);
     const loan = num(c.loanAmount);
     let ltv = num(c.loanLTV);
     if (ltv && ltv <= 1.5) ltv = Math.round(ltv * 10000) / 100;              // 0.965 -> 96.5
     if (!ltv && price && loan) ltv = Math.round((loan / price) * 10000) / 100;
     const today = new Date();
-    const { data: existing } = await sb.from("preapproval_borrowers").select("id,data").eq("surefire_id", surefireId).maybeSingle();
+    let existing: { id: string; data: unknown } | null = null;
+    if (surefireId) existing = (await sb.from("preapproval_borrowers").select("id,data").eq("surefire_id", surefireId).maybeSingle()).data;
+    if (!existing && losGuid) existing = (await sb.from("preapproval_borrowers").select("id,data").eq("data->>losGuid", losGuid).limit(1).maybeSingle()).data;
     const prev = (existing?.data ?? {}) as Record<string, unknown>;
     const data = {
       ...prev,
       name: borrowerName(c),
       loanType: loanType(str(c.loanType) || str(c.loanProduct)),
-      maxPrice: price, maxLoan: loan, maxLtv: ltv,
+      maxPrice: price ?? prev.maxPrice ?? null, maxLoan: loan ?? prev.maxLoan ?? null, maxLtv: ltv ?? prev.maxLtv ?? null,
       term: term(c),
       rate: prev.rate || "Floating",
       approvedOn: prev.approvedOn || isoDay(today),
@@ -93,8 +98,9 @@ Deno.serve(async (req) => {
       loanNumber: str(c.loanFileNumber) || prev.loanNumber || "",
       verified: prev.verified ?? [0, 1, 2, 3, 4],
       need: prev.need ?? [5, 6],
-      source: "surefire",
-      surefireId,
+      source: str(c.source) === "arive" ? "arive" : (prev.source || "surefire"),
+      surefireId: surefireId || prev.surefireId || null,
+      losGuid: losGuid || prev.losGuid || null,
       surefire: {                                              // what Surefire sent, shown to staff while they confirm
         receivedAt: today.toISOString(),
         loanStatus: str(c.loanStatus), preApproval: c.loanPreApproval ?? null,
@@ -105,11 +111,12 @@ Deno.serve(async (req) => {
       needsReview: true,                                       // every import (and every change) must be confirmed by staff
       updatedAt: today.toISOString(),
     };
-    const row = { name: data.name, data, surefire_id: surefireId };
+    const row: Record<string, unknown> = { name: data.name, data };
+    if (data.surefireId) row.surefire_id = data.surefireId;
     const { error } = existing
       ? await sb.from("preapproval_borrowers").update(row).eq("id", existing.id)
       : await sb.from("preapproval_borrowers").insert(row);
-    results.push(error ? { surefireId, error: error.message } : { surefireId, ok: true, updated: !!existing });
+    results.push(error ? { surefireId, losGuid, error: error.message } : { surefireId, losGuid, ok: true, updated: !!existing });
   }
   const failed = results.some((r) => "error" in r);
   return reply(failed ? 500 : 200, { results });
