@@ -215,6 +215,13 @@ body.readonly .preset, body.readonly .preset-note { display: none }
 td.lo-glow, th.lo-glow { outline-color: #f59e0b !important; outline-offset: -3px !important; box-shadow: inset 0 0 0 999px rgba(245,158,11,.16) !important; border-radius: 0 }
 /* ===== Closing costs ===== */
 table.fees { min-width: 640px }
+#feeTable { min-width: 0 }
+#feeTable td.num { text-align: right }
+#feeTable .fee-amt { width: 120px; margin-left: auto }
+#feeTable .fee-amt input { text-align: right }
+#feeTable .fee-nm { color: var(--fg); font-size: 14px }
+#feeTable .fee-why { font-size: 12px; color: var(--muted); margin-top: 2px }
+#feeTable .fee-why .btn.link { font-size: 12px; padding: 0; min-height: 0 }
 table.fees td, table.fees th { padding: 6px 8px; vertical-align: middle }
 table.fees th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; text-align: left }
 table.fees input[type=text], table.fees input[type=number], table.fees select { padding: 5px 7px; font-size: 14px }
@@ -1074,26 +1081,31 @@ function renderClosing(a) {
   document.getElementById("closingSec").hidden = !has && document.body.classList.contains("readonly");
   if (!has) { feeRowsKey = ""; $("feeTable").innerHTML = ""; return; }
   const loan = a ? a.loan : state.price;
-  const key = items.length + ":" + state.closing.template;
-  // Rebuild inputs only when rows change, so typing keeps focus; otherwise refresh the computed column.
+  // This loan's fees in dollars. The rules behind them (flat $, %, per $100, months of reserves, APR, prepaid) live in the fee template (Manage > Edit).
+  // Staff can type over an amount for this loan only; Reset puts the template's figure back.
+  const ro = document.body.classList.contains("readonly");
+  const key = items.length + ":" + state.closing.template + ":" + ro;
   if (key !== feeRowsKey || !$("feeTable").rows.length || !$("feeTable").contains(document.activeElement)) {
     feeRowsKey = key;
-    $("feeTable").innerHTML = `<thead><tr><th>Fee</th><th>Amount</th><th>+ %</th><th>Paid by</th><th title="Counts toward the APR">APR</th><th title="Prepaid or escrow deposit">Prepaid</th><th class="num">Est. (option A)</th><th class="staff-only"></th></tr></thead><tbody>` +
+    $("feeTable").innerHTML = `<thead><tr><th>Fee</th><th>Paid by</th><th class="num">Amount${state.scenarios.length > 1 ? " (option A)" : ""}</th><th class="staff-only"></th></tr></thead><tbody>` +
       items.map((it, i) => `<tr data-f="${i}">
-        <td><input type="text" data-k="name" value="${escAttr(it.name)}" aria-label="Fee name"></td>
-        <td><div class="affix pre"><span>$</span><input type="number" min="0" step="1" data-k="amt" value="${+it.amt || 0}" aria-label="Amount"></div></td>
-        <td><input class="pct" type="number" min="0" step="0.001" data-k="pct" value="${+it.pct || 0}" aria-label="Percent"></td>
-        <td><select data-k="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select></td>
-        <td><input type="checkbox" data-k="apr"${it.apr ? " checked" : ""} aria-label="Counts toward APR"></td>
-        <td><input type="checkbox" data-k="prepaid"${it.prepaid ? " checked" : ""} aria-label="Prepaid or escrow"></td>
-        <td class="num" data-out></td>
+        <td>${it.custom && !ro ? `<input type="text" data-k="name" value="${escAttr(it.name)}" aria-label="Fee name">` : `<span class="fee-nm">${escAttr(it.name)}</span>`}</td>
+        <td>${ro ? (BY.find(([v]) => v === it.by) || BY[0])[1] : `<select data-k="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select>`}</td>
+        <td class="num">${ro ? `<span data-amt></span>` : `<div class="affix pre fee-amt"><span>$</span><input type="number" min="0" step="1" data-k="over" aria-label="Amount for this loan"></div>`}<div class="fee-why" data-why></div></td>
         <td class="staff-only"><button class="icon-btn fee-x" type="button" data-del="${i}" aria-label="Remove fee">×</button></td>
       </tr>`).join("") + `</tbody>`;
   }
   items.forEach((it, i) => {
     const { a: amt, est, note } = feeAmount(it, loan);
-    const cell = $("feeTable").querySelector(`tr[data-f="${i}"] [data-out]`);
-    if (cell) cell.innerHTML = usd.format(amt) + (note ? ` <span class="est">${note}</span>` : "") + (est ? ` <span class="est">est.</span>` : "") + (it.by !== "B" ? ` <span class="est">${it.by === "S" ? "seller" : "lender"}</span>` : "");
+    const tr = $("feeTable").querySelector(`tr[data-f="${i}"]`); if (!tr) return;
+    const inp = tr.querySelector("[data-k=over]"), out = tr.querySelector("[data-amt]");
+    if (inp && document.activeElement !== inp) inp.value = Math.round(amt);
+    if (out) out.textContent = usd.format(amt);
+    const base = /deed|transfer|stamp|documentary/i.test(it.name) ? "price" : "loan";
+    const why = it.custom ? "Added for this loan" : it.over ? `Changed for this loan${ro ? "" : ` · <button class="btn link" type="button" data-reset="${i}">Reset</button>`}`
+      : [note === "1 yr" ? "1 year of insurance" : /mo$/.test(note) ? `${note.replace(" mo", "")} months of ${/tax/i.test(it.name) ? "taxes" : "insurance"}` : note ? `${note} of the price` : +it.pct ? `${+it.amt ? usd.format(+it.amt) + " + " : ""}${+it.pct}% of the ${base}` : "",
+         est ? "estimate" : "", it.apr ? "in APR" : "", it.prepaid ? "prepaid" : ""].filter(Boolean).join(" · ");
+    tr.querySelector("[data-why]").innerHTML = why;
   });
   const t = closingTotals(loan);
   $("feeSum").innerHTML = `<span>Lender fees (in APR) <b>${usd.format(t.apr)}</b></span><span>Third-party fees <b>${usd.format(t.other)}</b></span><span>Prepaids &amp; escrow <b>${usd.format(t.prepaid)}</b></span>` +
@@ -1103,18 +1115,26 @@ function renderClosing(a) {
 $("feeTable").addEventListener("input", (e) => {
   const t = e.target, tr = t.closest("tr[data-f]"); if (!tr || !t.dataset.k) return;
   const it = state.closing.items[+tr.dataset.f], k = t.dataset.k;
-  it[k] = t.type === "checkbox" ? t.checked : (k === "name" || k === "by") ? t.value : (+t.value || 0);
-  // An amount typed here wins over the automatic insurance, reserves and tax stamp figures
-  if (k === "amt" || k === "pct") it.auto = false;
+  // An amount typed here is this loan's figure: it replaces the template's rule (%, per $100, months) for this loan only
+  if (k === "over") { it.amt = +t.value || 0; it.pct = 0; it.auto = false; it.over = true; render(); return; }
+  it[k] = (k === "name" || k === "by") ? t.value : (+t.value || 0);
   render();
 });
 $("feeTable").addEventListener("click", (e) => {
+  const r = e.target.closest("[data-reset]");
+  if (r) {
+    const it = state.closing.items[+r.dataset.reset], tpl = feeTemplates.find((t) => t.name === state.closing.template);
+    const orig = tpl && tpl.items.find((x) => x.name === it.name);
+    if (orig) Object.assign(it, JSON.parse(JSON.stringify(orig)));
+    delete it.over; if (!orig || orig.auto !== false) delete it.auto;
+    render(); return;
+  }
   const d = e.target.closest("[data-del]"); if (!d) return;
   state.closing.items.splice(+d.dataset.del, 1); feeRowsKey = ""; renderCards(); render();
 });
 $("feeAdd").addEventListener("click", () => {
   if (!hasClosing()) state.scenarios.forEach((s) => s.fees = 0);
-  state.closing.items.push({ name: "New fee", amt: 0, pct: 0, by: "B", apr: false, prepaid: false });
+  state.closing.items.push({ name: "New fee", amt: 0, pct: 0, by: "B", apr: false, prepaid: false, custom: true, over: true });
   state.closing.open = true;
   feeRowsKey = ""; renderCards(); render();
   const rows = $("feeTable").querySelectorAll("tbody tr"); const inp = rows[rows.length - 1].querySelector("input"); inp.focus(); inp.select();
