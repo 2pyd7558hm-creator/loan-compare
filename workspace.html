@@ -234,6 +234,10 @@ table.fees .est { font-size: 11px; color: var(--muted); font-weight: 500 }
 .tpl-row .nm { flex: 1 }
 .tpl-row .rm { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: #b42318; font-size: 18px; line-height: 1; cursor: pointer }
 .tpl-row .rm:hover { background: #fde8e7 }
+.tpl-row .danger-link { color: #b42318 }
+.tpl-edit { border-top: 1px solid var(--line); padding: 10px 0; display: grid; gap: 10px }
+.tpl-edit-top { display: flex; gap: 12px; flex-wrap: wrap; align-items: end }
+.tpl-edit-top label { display: grid; gap: 4px; font-size: 13px; color: var(--muted) }
 .tpl-row .sure { display: flex; gap: 6px; align-items: center; color: #b42318; font-size: 13px }
 .lo-box { position: absolute; z-index: 49; pointer-events: none; border: 3px solid #3cc0c1; border-radius: 8px; background: rgba(60,192,193,.16); box-shadow: 0 0 0 6px rgba(60,192,193,.28); transition: opacity .4s }
 body.presenting main table, body.presenting .cards { user-select: none; -webkit-user-select: none }
@@ -537,6 +541,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
         <div class="fee-sum" id="feeSum"></div>
         <button class="btn" id="feeToggle" type="button" aria-expanded="false">Show all fees</button>
       </div>
+      <p class="tax-hint" id="feeStateNote" hidden></p>
       <div id="feeBody">
       <div class="table-wrap" id="feeWrap" hidden><table class="fees" id="feeTable"></table></div>
       <div class="actions staff-only">
@@ -758,15 +763,28 @@ function analyze(s) {
 /* ---------- Closing costs (itemized from a fee template) ---------- */
 // A fee is a flat amount plus a percent. Deed/transfer taxes are a percent of the price; other percents are of the loan amount.
 // Prepaids left at $0 are estimated from the taxes and insurance above.
+// The insurance premium (1 year) and the tax and insurance reserves always follow the taxes and insurance above:
+// 3 months of each on a purchase, 6 on a refinance. Typing an amount in the fee table overrides it.
+// State deed tax stamps follow the state's rule (Colorado: $0.01 per $100 of the price, purchases only) unless typed over.
+const STAMP_PCT = { CO: 0.01 };
+function feeState() {
+  const t = feeTemplates.find((x) => x.name === (state.closing && state.closing.template));
+  let st = null; try { st = file.st; } catch (e) { /* the file isn't set up yet while the page loads */ }
+  return ((t && t.state) || st || "CO").toUpperCase();
+}
+function isRefiFile() { return /^refinance/i.test($("cTitle").value) || /refi/i.test((state.closing && state.closing.template) || ""); }
+function reserveMonths() { return isRefiFile() ? 6 : 3; }
 function feeAmount(it, loan) {
-  const base = /deed|transfer|stamp/i.test(it.name) ? state.price : loan;
-  let a = (+it.amt || 0) + base * (+it.pct || 0) / 100, est = false;
-  if (!a && it.prepaid) {
-    if (/hazard.*premium|insurance premium/i.test(it.name)) { a = state.insurance; est = true; }
-    else if (/hazard.*reserve|insurance reserve/i.test(it.name)) { a = state.insurance / 12 * 2; est = true; }
-    else if (/tax.*reserve/i.test(it.name)) { a = state.taxes / 12 * 3; est = true; }
+  const isStamp = /deed|transfer|stamp|documentary/i.test(it.name);
+  const base = isStamp ? state.price : loan;
+  let a = (+it.amt || 0) + base * (+it.pct || 0) / 100, est = false, note = "";
+  if (it.auto !== false) {
+    if (isStamp && STAMP_PCT[feeState()] !== undefined) { a = isRefiFile() ? 0 : state.price * STAMP_PCT[feeState()] / 100; note = feeState() === "CO" ? "$0.01 per $100" : ""; }
+    else if (it.prepaid && /hazard.*premium|insurance premium/i.test(it.name)) { a = state.insurance; est = true; note = "1 yr"; }
+    else if (it.prepaid && /hazard.*reserve|insurance reserve/i.test(it.name)) { a = state.insurance / 12 * reserveMonths(); est = true; note = reserveMonths() + " mo"; }
+    else if (it.prepaid && /tax.*reserve/i.test(it.name)) { a = state.taxes / 12 * reserveMonths(); est = true; note = reserveMonths() + " mo"; }
   }
-  return { a, est };
+  return { a, est, note };
 }
 function closingTotals(loan) {
   const t = { apr: 0, other: 0, prepaid: 0, seller: 0, lender: 0 };
@@ -1032,9 +1050,9 @@ $("brandFoot").textContent = `${BRAND.name}, powered by ${BRAND.company} · ${BR
 
 
 const DEFAULT_FEE_TEMPLATES = [
-  {"name":"Xpert Purchase","state":"CO","items":[{"name":"Underwriting Fee","amt":1295,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Processing Fee","amt":1095,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":850,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":139,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":2450,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":86,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":105,"pct":0.001,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":400,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":728,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":2400,"pct":0,"by":"B","apr":false,"prepaid":true}]},
-  {"name":"Xpert Purchase (2)","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":1850,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.001,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
-  {"name":"Xpert Condo Purchase","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Condo/PUD Certification","amt":400,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":1850,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.001,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"Xpert Purchase","state":"CO","items":[{"name":"Underwriting Fee","amt":1295,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Processing Fee","amt":1095,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":850,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":139,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":2450,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":86,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.01,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":400,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":728,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":2400,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"Xpert Purchase (2)","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":1850,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.01,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
+  {"name":"Xpert Condo Purchase","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Condo/PUD Certification","amt":400,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":1850,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.01,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
   {"name":"Xpert Refinance","state":"CO","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":800,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":750,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Closing Fee","amt":350,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
   {"name":"Broker Purchase UWM","state":"CO","items":[{"name":"Underwriting Fee","amt":1110,"pct":0,"by":"L","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":750,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":7,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"MERS Registration","amt":24,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee (second line, check)","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Misc Title Services","amt":100,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.01,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Premium","amt":0,"pct":0,"by":"B","apr":false,"prepaid":true}]},
   {"name":"NH Purchase","state":"NH","items":[{"name":"Underwriting Fee","amt":1695,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Appraisal Fee","amt":715,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Flood Certification Fee","amt":8,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Credit Report","amt":120,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Lender's Title Insurance","amt":650,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Owner's Title Insurance","amt":500,"pct":0,"by":"S","apr":false,"prepaid":false},{"name":"Closing Fee","amt":650,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Recording Fees","amt":191,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"State Deed Tax Stamp","amt":0,"pct":0.77,"by":"B","apr":false,"prepaid":false},{"name":"Closing Protection Letter","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"MERS Registration","amt":25,"pct":0,"by":"B","apr":true,"prepaid":false},{"name":"Tax Service Fee","amt":85,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Tax Service Fee (second line, check)","amt":195,"pct":0,"by":"B","apr":false,"prepaid":false},{"name":"Hazard Insurance Premium","amt":1550.04,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Hazard Insurance Reserves","amt":258.34,"pct":0,"by":"B","apr":false,"prepaid":true},{"name":"Taxes Reserves","amt":648,"pct":0,"by":"B","apr":false,"prepaid":true}]}
@@ -1047,6 +1065,9 @@ let feeRowsKey = "";
 function renderClosing(a) {
   const items = state.closing.items, has = items.length > 0, open = !has || !!state.closing.open;
   $("feeEmpty").hidden = has; $("feeWrap").hidden = !has; $("feeBar").hidden = !has;
+  const fst = feeState(), STATE_NAMES = { CO: "Colorado", NH: "New Hampshire" };
+  $("feeStateNote").hidden = !has;
+  $("feeStateNote").textContent = `Fees, taxes and recording costs are estimates based on ${STATE_NAMES[fst] || fst} and vary by state and county. Insurance reserves and tax reserves are ${reserveMonths()} months each${isRefiFile() ? " on a refinance" : " on a purchase"}.`;
   $("feeBody").hidden = !open;
   $("feeToggle").textContent = open ? "Hide fees" : `Show all ${items.length} fees`; $("feeToggle").setAttribute("aria-expanded", open);
   $("feeClear").hidden = !has; $("tplSaveOpen").hidden = !has;
@@ -1070,9 +1091,9 @@ function renderClosing(a) {
       </tr>`).join("") + `</tbody>`;
   }
   items.forEach((it, i) => {
-    const { a: amt, est } = feeAmount(it, loan);
+    const { a: amt, est, note } = feeAmount(it, loan);
     const cell = $("feeTable").querySelector(`tr[data-f="${i}"] [data-out]`);
-    if (cell) cell.innerHTML = usd.format(amt) + (est ? ` <span class="est">est.</span>` : "") + (it.by !== "B" ? ` <span class="est">${it.by === "S" ? "seller" : "lender"}</span>` : "");
+    if (cell) cell.innerHTML = usd.format(amt) + (note ? ` <span class="est">${note}</span>` : "") + (est ? ` <span class="est">est.</span>` : "") + (it.by !== "B" ? ` <span class="est">${it.by === "S" ? "seller" : "lender"}</span>` : "");
   });
   const t = closingTotals(loan);
   $("feeSum").innerHTML = `<span>Lender fees (in APR) <b>${usd.format(t.apr)}</b></span><span>Third-party fees <b>${usd.format(t.other)}</b></span><span>Prepaids &amp; escrow <b>${usd.format(t.prepaid)}</b></span>` +
@@ -1083,6 +1104,8 @@ $("feeTable").addEventListener("input", (e) => {
   const t = e.target, tr = t.closest("tr[data-f]"); if (!tr || !t.dataset.k) return;
   const it = state.closing.items[+tr.dataset.f], k = t.dataset.k;
   it[k] = t.type === "checkbox" ? t.checked : (k === "name" || k === "by") ? t.value : (+t.value || 0);
+  // An amount typed here wins over the automatic insurance, reserves and tax stamp figures
+  if (k === "amt" || k === "pct") it.auto = false;
   render();
 });
 $("feeTable").addEventListener("click", (e) => {
@@ -1382,20 +1405,69 @@ $("tplDelBtn").addEventListener("click", async () => {
   say("feeStatus", `Deleted the “${name}” template. This comparison keeps its fees.`);
 });
 
-// Manage: list every template with a remove (–) button and an inline confirm
+// Manage: list every template with Edit and Delete; Edit opens the template's fees right here, Delete asks first
+let tplEdit = null; // { i, name, state, items } while a template is being edited
+const AUTO_FEE = /hazard.*premium|insurance premium|hazard.*reserve|insurance reserve|tax.*reserve|deed|transfer|stamp|documentary/i;
 function drawTplList() {
-  $("tplList").innerHTML = feeTemplates.length ? feeTemplates.map((t, i) => `<div class="tpl-row" data-t="${i}">
+  $("tplList").innerHTML = feeTemplates.length ? feeTemplates.map((t, i) => tplEdit && tplEdit.i === i ? tplEditor(i) : `<div class="tpl-row" data-t="${i}">
       <span class="st">${escAttr(t.state || "")}</span><span class="nm">${escAttr(t.name)} <span style="color:var(--muted);font-size:12px">· ${t.items.length} fees</span></span>
-      <button class="rm" type="button" data-rm="${i}" aria-label="Remove ${escAttr(t.name)}" title="Remove template">–</button></div>`).join("")
+      <button class="btn link" type="button" data-edit="${i}">Edit</button>
+      <button class="btn link danger-link" type="button" data-rm="${i}" aria-label="Delete ${escAttr(t.name)}">Delete</button></div>`).join("")
     : `<p class="fee-empty">No templates yet. Fill in fees, then use “Save as fee template”.</p>`;
 }
-$("tplManage").addEventListener("click", () => { const box = $("tplManageBox"); box.hidden = !box.hidden; if (!box.hidden) { drawTplList(); say("tplManageStatus", tplFromDb ? "" : "Templates can't be changed right now: the database didn't load them."); } });
+function tplEditor(i) {
+  const e = tplEdit;
+  return `<div class="tpl-edit" data-t="${i}">
+    <div class="tpl-edit-top"><label>Name <input type="text" data-tk="name" value="${escAttr(e.name)}"></label>
+      <label>State <input type="text" data-tk="state" maxlength="2" value="${escAttr(e.state || "")}" style="width:56px"></label></div>
+    <div class="table-wrap"><table class="fees"><thead><tr><th>Fee</th><th>Amount</th><th>+ %</th><th>Paid by</th><th title="Counts toward the APR">APR</th><th title="Prepaid or escrow deposit">Prepaid</th><th></th></tr></thead><tbody>${e.items.map((it, j) => `<tr data-ti="${j}">
+      <td><input type="text" data-ik="name" value="${escAttr(it.name)}" aria-label="Fee name">${AUTO_FEE.test(it.name) && it.auto !== false && (it.prepaid || STAMP_PCT[(e.state || "").toUpperCase()] !== undefined) ? `<span class="tax-hint">Figured automatically. Type an amount to override.</span>` : ""}</td>
+      <td><div class="affix pre"><span>$</span><input type="number" min="0" step="1" data-ik="amt" value="${+it.amt || 0}" aria-label="Amount"></div></td>
+      <td><input class="pct" type="number" min="0" step="0.001" data-ik="pct" value="${+it.pct || 0}" aria-label="Percent"></td>
+      <td><select data-ik="by" aria-label="Paid by">${BY.map(([v, t]) => `<option value="${v}"${it.by === v ? " selected" : ""}>${t}</option>`).join("")}</select></td>
+      <td><input type="checkbox" data-ik="apr"${it.apr ? " checked" : ""} aria-label="Counts toward APR"></td>
+      <td><input type="checkbox" data-ik="prepaid"${it.prepaid ? " checked" : ""} aria-label="Prepaid or escrow"></td>
+      <td><button class="icon-btn fee-x" type="button" data-tdel="${j}" aria-label="Remove fee">×</button></td></tr>`).join("")}</tbody></table></div>
+    <div class="actions"><button class="btn" type="button" data-tadd>+ Add a fee</button>
+      <button class="btn primary" type="button" data-tsave>Save</button><button class="btn link" type="button" data-tcancel>Cancel</button></div>
+  </div>`;
+}
+$("tplManage").addEventListener("click", () => { tplEdit = null; const box = $("tplManageBox"); box.hidden = !box.hidden; if (!box.hidden) { drawTplList(); say("tplManageStatus", tplFromDb ? "" : "Templates can't be changed right now: the database didn't load them."); } });
 $("tplManageClose").addEventListener("click", () => { $("tplManageBox").hidden = true; });
+$("tplList").addEventListener("input", (e) => {
+  if (!tplEdit) return;
+  const t = e.target;
+  if (t.dataset.tk) { tplEdit[t.dataset.tk] = t.value; return; }
+  const tr = t.closest("tr[data-ti]"); if (!tr || !t.dataset.ik) return;
+  const it = tplEdit.items[+tr.dataset.ti], k = t.dataset.ik;
+  it[k] = t.type === "checkbox" ? t.checked : (k === "name" || k === "by") ? t.value : (+t.value || 0);
+  if (k === "amt" || k === "pct") it.auto = false;
+});
 $("tplList").addEventListener("click", async (e) => {
+  const ed = e.target.closest("[data-edit]");
+  if (ed) { const t = feeTemplates[+ed.dataset.edit]; tplEdit = { i: +ed.dataset.edit, name: t.name, state: t.state || "", items: JSON.parse(JSON.stringify(t.items)) }; drawTplList(); return; }
+  if (e.target.closest("[data-tcancel]")) { tplEdit = null; drawTplList(); return; }
+  if (e.target.closest("[data-tadd]") && tplEdit) { tplEdit.items.push({ name: "New fee", amt: 0, pct: 0, by: "B", apr: false, prepaid: false }); drawTplList(); return; }
+  const td = e.target.closest("[data-tdel]");
+  if (td && tplEdit) { tplEdit.items.splice(+td.dataset.tdel, 1); drawTplList(); return; }
+  if (e.target.closest("[data-tsave]") && tplEdit) {
+    const t = feeTemplates[tplEdit.i], name = tplEdit.name.trim(), st = tplEdit.state.trim().toUpperCase() || null;
+    if (!name) { say("tplManageStatus", "Give the template a name.", true); return; }
+    if (!tplFromDb || !t || !t.id) { say("tplManageStatus", "This template can't be changed right now.", true); return; }
+    if (feeTemplates.some((x) => x !== t && x.name === name)) { say("tplManageStatus", `There's already a template named “${name}”.`, true); return; }
+    const { error } = await sb.from("fee_templates").update({ name, state: st, items: tplEdit.items }).eq("id", t.id);
+    if (error) { say("tplManageStatus", "Not saved: " + error.message, true); return; }
+    const old = t.name; tplEdit = null;
+    await loadFeeTemplates(); drawTplList();
+    if (state.closing && state.closing.template === old) state.closing.template = name;
+    say("tplManageStatus", `Saved “${name}” for everyone. Comparisons that already used it keep their fees until you choose it again.`);
+    return;
+  }
   const rm = e.target.closest("[data-rm]"), yes = e.target.closest("[data-yes]"), no = e.target.closest("[data-no]");
   if (rm) {
     const t = feeTemplates[+rm.dataset.rm];
-    rm.outerHTML = `<span class="sure">Remove for everyone? <button class="btn danger" type="button" data-yes="${rm.dataset.rm}">Remove</button><button class="btn link" type="button" data-no>Keep</button></span>`;
+    const row = rm.closest(".tpl-row"); row.querySelectorAll("[data-edit],[data-rm]").forEach((b) => b.remove());
+    row.insertAdjacentHTML("beforeend", `<span class="sure">Delete “${escAttr(t.name)}” for everyone? This can't be undone. <button class="btn danger" type="button" data-yes="${rm.dataset.rm}">Delete</button><button class="btn link" type="button" data-no>Keep</button></span>`);
     return;
   }
   if (no) { drawTplList(); return; }
