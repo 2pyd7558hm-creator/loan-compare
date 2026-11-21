@@ -11,6 +11,7 @@ Side-by-side mortgage comparisons for That Mortgage Couple, powered by Xpert Hom
 | `supabase/001_schema.sql` | Database tables and row-level security rules (already applied to the Supabase project). |
 | `supabase/002_fee_templates.sql` | Shared closing-cost (fee) templates, with the starting templates copied from the team's existing ones. |
 | `supabase/005_preapproval.sql` | Tables for the pre-approval letter desk (staff only). Run once in the SQL editor. |
+| `supabase/006_preapproval_surefire.sql` + `supabase/functions/surefire-preapproval` | Surefire's outbound webhook sends pre-approved borrowers to the letter desk. They arrive as "Confirm limits" and can't get a letter until staff confirm. Deploy with `--no-verify-jwt` and set the `SUREFIRE_WEBHOOK_TOKEN` secret. |
 | `supabase/003_hub_tabs.sql` | Client link returns only the tabs marked "Borrower sees this tab". Run once in the SQL editor. |
 
 ## How it works
