@@ -28,7 +28,7 @@ const OPTION = {
 };
 const DRAFT_KEYS = ["refi", "condo", "jumbo_all", "price", "state", "county", "options", "seller_credit_all", "dpa_amount", "dpa_rate",
   "rent", "income", "extra_monthly", "extra_payments_per_year", "cost_of_waiting", "debts", "extra_payments",
-  "arm_vs_fixed", "bid_over_asking", "equity", "investment", "paying_cash", "assumptions"];
+  "arm_vs_fixed", "bid_over_asking", "equity", "investment", "paying_cash", "credit_reports", "assumptions"];
 const SCHEMA = {
   type: "object", additionalProperties: false,
   properties: {
@@ -41,6 +41,7 @@ const SCHEMA = {
         options: { type: "array", items: OPTION },
         seller_credit_all: N, dpa_amount: N, dpa_rate: N, rent: N, income: N, extra_monthly: N, extra_payments_per_year: N,
         cost_of_waiting: B, debts: B, extra_payments: B, arm_vs_fixed: B, bid_over_asking: B, equity: B, investment: B, paying_cash: B,
+        credit_reports: { type: "integer" },
         assumptions: { type: "array", items: S },
       },
       required: DRAFT_KEYS,
@@ -61,7 +62,7 @@ function normalize(out: any) {
     draft: {
       ...d, price: pos(d.price), state: txt(d.state), county: txt(d.county),
       seller_credit_all: pos(d.seller_credit_all), dpa_amount: pos(d.dpa_amount), dpa_rate: pos(d.dpa_rate), rent: pos(d.rent), income: pos(d.income),
-      extra_monthly: pos(d.extra_monthly), extra_payments_per_year: pos(d.extra_payments_per_year), assumptions: Array.isArray(d.assumptions) ? d.assumptions : [],
+      extra_monthly: pos(d.extra_monthly), extra_payments_per_year: pos(d.extra_payments_per_year), credit_reports: Math.max(1, Math.min(4, Math.round(+d.credit_reports || 1))), assumptions: Array.isArray(d.assumptions) ? d.assumptions : [],
       // deno-lint-ignore no-explicit-any
       options: (Array.isArray(d.options) ? d.options : []).slice(0, 4).map((o: any) => ({
         type: o.type === "unknown" ? null : o.type, term: pos(o.term), arm: o.arm || 0, rate: pos(o.rate), points: nonneg(o.points), down_pct: nonneg(o.down_pct),
@@ -88,6 +89,7 @@ Fill the draft like this:
 - state: two-letter code, "" if not stated. county: the county name without the word "County", "" if not stated.
 - refi: true for a refinance. condo: true for a condo.
 - Calculators to add, true only when the note asks for or clearly implies them: cost_of_waiting ("wait", "waiting"), debts (paying off debts, consolidation), extra_payments (extra or faster payoff; also set extra_monthly in dollars or extra_payments_per_year as a count), arm_vs_fixed (an ARM compared with a fixed loan), bid_over_asking (offering over asking), equity (equity or appreciation), investment (rental or investment property), paying_cash (paying cash, an all-cash purchase or a cash offer). rent and income are monthly rent and yearly income in dollars when stated. Any number not stated is 0.
+- credit_reports: how many separate credit reports the borrowers need. 1 for one borrower, or for a married or partnered couple (one joint report). Each co-borrower who isn't the borrower's spouse or partner adds one ("me and my mom", "two brothers", "my friend and I", "with my dad as co-borrower" = 2; "me, my wife and my mom" = 2). Someone only giving gift money or helping isn't a borrower. Use 1 unless the note clearly says so.
 - assumptions: short plain-English notes about anything you had to read loosely, for the loan officer to check. Empty if none.
 
 Ask ONE short question (kind "question"; fill draft with what you have) only when a missing detail would change the comparison and a sensible default would likely be wrong. The main cases:

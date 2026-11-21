@@ -43,6 +43,8 @@
     C("Cost of waiting for Ann Perkins, 400k CO conv 5% down 6.5, rates might drop or prices go up", { name: "Ann Perkins", price: 400000, calcs: ["cow"] }),
     C("debt consolidation refi for Ron Swanson, home value 600k, owes 300k at 3.5%, credit cards 40k", { name: "Ron Swanson", refi: true, calcs: ["debt"], loans: [340000, 340000] }),
     C(["Refi for Ann Perkins, home worth 500k", "320k and a 45k HELOC"], { name: "Ann Perkins", refi: true, loans: [365000, 365000] }),
+    C("Me and my mom are buying a $500,000 house in Denver CO, 30 yr 6.5 vs 15 yr 6", { price: 500000, reports: 2 }),
+    C("Kevin Malone and his wife, $500,000, Denver CO, 30 yr 6.5 vs 15 yr 6, her mom is gifting 20k", { name: "Kevin Malone", price: 500000, reports: 1 }),
     C("Investment property for April Ludgate 550k CO 25% down 7.5 rent 3,200", { name: "April Ludgate", price: 550000, calcs: ["invest"] }),
     C("Andy Dwyer 500k CO 7/6 ARM 6.0 vs 30 fixed 6.75 10% down, show ARM vs fixed", { name: "Andy Dwyer", opts: [o("conv", 30, 6, 10, { arm: 7 }), o("conv", 30, 6.75, 10, { arm: 0 })], calcs: ["arm"] }),
     C("Leslie Knope 475k CO conv 5% down 6.5 vs 20% down 6.25, equity over 10 years, bid 25k over asking", { name: "Leslie Knope", calcs: ["equity"] }),
@@ -78,6 +80,7 @@
     if (e.st) eq("state", s.st, e.st);
     if (e.county) eq("county", s.county, e.county);
     if (e.refi !== undefined) eq("refi", /^refinance/i.test(s.title), e.refi);
+    if (e.reports) { const r = state.creditReports || 1; if (r !== e.reports) f.push(`credit reports ${r} vs ${e.reports}`); }
     if (e.loans) e.loans.forEach((v, i) => { const x = s.opts[i]; if (!x || Math.abs(x.loan - v) > 1) f.push(`${LETTERS[i]} loan ${x ? Math.round(x.loan) : "missing"} vs ${v}`); });
     if (e.titleHas && !s.title.includes(e.titleHas)) f.push(`title lacks ${e.titleHas}: ${s.title}`);
     if (e.titleNot && e.titleNot.test(s.title)) f.push(`title has ${e.titleNot}: ${s.title}`);
