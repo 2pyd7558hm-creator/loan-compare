@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<style>body{margin:0}</style>
+<title>Pre-Approval Letter Desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a loan-desk worksheet. Request on the left, underwriting-style checks on the right, approved files and letter log below. */
+:root {
+  --bg: #f3f6f6;
+  --panel: #ffffff;
+  --ink: #15292c;
+  --muted: #5b6f72;
+  --line: #d6e0e0;
+  --accent: #0f7f86;        /* teal from the That Mortgage Couple mark */
+  --accent-ink: #ffffff;
+  --accent-soft: #e2f2f2;
+  --ok: #1f7a3f; --ok-soft: #e4f4ea;
+  --bad: #b3261e; --bad-soft: #fbe9e7;
+  --warn: #8a5a00; --warn-soft: #fbf1dc;
+  --display: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1a1c; --panel: #172628; --ink: #e3eeee; --muted: #94a8aa; --line: #2b3f42;
+  --accent: #3fb6bc; --accent-ink: #062022; --accent-soft: #173a3c;
+  --ok: #6fd394; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1c1a; --warn: #f0c060; --warn-soft: #3a2f14;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1a1c; --panel: #172628; --ink: #e3eeee; --muted: #94a8aa; --line: #2b3f42;
+  --accent: #3fb6bc; --accent-ink: #062022; --accent-soft: #173a3c;
+  --ok: #6fd394; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1c1a; --warn: #f0c060; --warn-soft: #3a2f14;
+  color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+@media (max-width: 480px) { .fig b { font-size: .88rem; overflow-wrap: normal; word-break: break-word } .fig { padding: 8px } }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5 }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 20px }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px }
+h1 { font-family: var(--display); font-weight: 800; font-size: 1.6rem; margin: 0; letter-spacing: -0.01em }
+h2 { font-family: var(--display); font-weight: 700; font-size: 1.05rem; margin: 0 }
+.sub { color: var(--muted); margin: 0 }
+.grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0,1fr) } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 14px; min-width: 0; align-content: start }
+label { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); display: grid; gap: 4px }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 9px 10px; width: 100%; text-transform: none; letter-spacing: 0 }
+input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+.row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px }
+.row3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px }
+@media (max-width: 480px) { .row3 { grid-template-columns: minmax(0,1fr) minmax(0,1fr) } }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 6px 10px; font: inherit; font-size: .85rem; cursor: pointer }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink) }
+.downwrap { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: end }
+button.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 12px 16px; font: inherit; font-weight: 600; cursor: pointer }
+button.primary:disabled { opacity: .45; cursor: not-allowed }
+button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font: inherit; font-size: .9rem; cursor: pointer }
+.figs { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px }
+.fig { background: var(--bg); border-radius: 8px; padding: 10px }
+.fig b { display: block; font-family: var(--mono); font-size: 1.05rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
+.fig span { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted) }
+ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+ul.checks li { display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 6px; padding: 7px 9px; border-radius: 7px; font-size: .9rem }
+li.ok { background: var(--ok-soft); color: var(--ok) } li.bad { background: var(--bad-soft); color: var(--bad) } li.warn { background: var(--warn-soft); color: var(--warn) }
+.confirm { display: grid; grid-template-columns: 20px minmax(0,1fr); gap: 8px; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: .9rem; color: var(--ink) }
+.confirm input { width: 18px; height: 18px; margin-top: 2px }
+.msg { font-size: .9rem; color: var(--muted) }
+.msg.err { color: var(--bad) }
+textarea { min-height: 120px; font-size: .9rem; resize: vertical }
+.tablebox { overflow-x: auto }
+table { width: 100%; border-collapse: collapse; font-size: .88rem }
+th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line) }
+td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums }
+td.num { font-family: var(--mono) }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: .75rem; font-weight: 600 }
+.pill.ok { background: var(--ok-soft); color: var(--ok) } .pill.bad { background: var(--bad-soft); color: var(--bad) }
+.empty { color: var(--muted); font-size: .9rem; padding: 8px 0 }
+details summary { cursor: pointer; font-family: var(--display); font-weight: 700 }
+.docs { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 4px 12px; font-size: .85rem; align-items: center }
+.docs .h { font-size: .7rem; text-transform: uppercase; color: var(--muted); letter-spacing: .05em }
+.docs input { width: 16px; height: 16px }
+.tbtn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: .85rem; padding: 0 }
+.banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: .9rem }
+@media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s } }
+</style>
+</head><body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Pre-Approval Letter Desk</h1>
+      <p class="sub">Realtor asks, you answer in under a minute. Letters can only go out within each borrower's approved limits.</p>
+    </div>
+    <span class="sub" id="who"></span>
+  </header>
+  <div class="banner" id="dbNote" hidden></div>
+  <div class="panel" id="vLogin" style="max-width:420px">
+    <h2>Sign in</h2>
+    <p class="sub" style="font-size:.9rem">Use the same email and password as the loan comparison workspace.</p>
+    <form id="loginForm" style="display:grid; gap:12px">
+      <label>Email <input id="loginEmail" type="email" autocomplete="username" required></label>
+      <label>Password <input id="loginPw" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit">Sign in</button>
+      <p class="msg" id="loginStatus" aria-live="polite"></p>
+      <a class="msg" href="workspace.html" style="color:var(--accent)">New here or forgot your password? Set it on the workspace page.</a>
+    </form>
+  </div>
+  <div id="app" hidden style="display:grid; gap:20px">
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="reqH">
+      <h2 id="reqH">Realtor request</h2>
+      <label>Borrower
+        <input id="borrower" list="borrowerList" autocomplete="off" placeholder="Start typing a name, e.g. Johnson">
+        <datalist id="borrowerList"></datalist>
+      </label>
+      <div class="row">
+        <label>Purchase price
+          <input id="price" inputmode="decimal" placeholder="450,000">
+        </label>
+        <div class="downwrap">
+          <label>Down payment
+            <input id="down" inputmode="decimal" placeholder="10">
+          </label>
+          <div class="seg" role="group" aria-label="Down payment unit">
+            <button type="button" id="unitPct" aria-pressed="true">%</button>
+            <button type="button" id="unitAmt" aria-pressed="false">$</button>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <label>Letter date <input id="letterDate" type="date"></label>
+        <label>Letter expires <input id="expDate" type="date"></label>
+      </div>
+      <label>Note for the realtor (optional, goes in the email text only)
+        <input id="note" placeholder="e.g. Offer on 123 Main St">
+      </label>
+    </section>
+
+    <section class="panel" aria-labelledby="chkH">
+      <h2 id="chkH">Check against the approval</h2>
+      <div class="figs">
+        <div class="fig"><span>Loan amount</span><b id="fLoan">—</b></div>
+        <div class="fig"><span>LTV</span><b id="fLtv">—</b></div>
+        <div class="fig"><span>Program</span><b id="fProg">—</b></div>
+      </div>
+      <ul class="checks" id="checks"><li class="warn"><span>•</span><span>Pick an approved borrower to start.</span></li></ul>
+      <label class="confirm"><input type="checkbox" id="confirm"><span>I confirm this letter matches the borrower's approved file and I am OK sending it.</span></label>
+      <button class="primary" id="make" disabled>Create PDF letter</button>
+      <p class="msg" id="makeMsg" aria-live="polite"></p>
+      <div id="sendBox" hidden style="display:grid; gap:8px">
+        <label>Email text for the realtor
+          <textarea id="emailText"></textarea>
+        </label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <button class="ghost" id="copyEmail">Copy email text</button>
+          <button class="ghost" id="saveAgain">Save PDF again</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="appH">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap">
+      <h2 id="appH">Approved borrowers</h2>
+      <button class="ghost" id="newB">Add approved borrower</button>
+    </div>
+    <p class="sub" style="font-size:.88rem">Enter each borrower once, when the pre-approval is issued in ARIVE. These limits are what every letter is checked against.</p>
+    <form id="bForm" hidden style="display:grid; gap:12px">
+      <div class="row">
+        <label>Borrower name(s) as printed <input id="bName" required placeholder="John &amp; Jane Johnson"></label>
+        <label>Loan type
+          <select id="bType"><option>Conventional</option><option>FHA</option><option>VA</option><option>USDA</option><option>Jumbo</option><option>Non-QM</option></select>
+        </label>
+      </div>
+      <div class="row3">
+        <label>Max purchase price <input id="bMaxPrice" inputmode="decimal" required placeholder="500,000"></label>
+        <label>Max loan amount <input id="bMaxLoan" inputmode="decimal" required placeholder="450,000"></label>
+        <label>Max LTV % <input id="bMaxLtv" inputmode="decimal" required placeholder="97"></label>
+      </div>
+      <div class="row3">
+        <label>Loan term <input id="bTerm" value="30 Year Fixed"></label>
+        <label>Approved on <input id="bApproved" type="date"></label>
+        <label>Approval expires <input id="bExpires" type="date" required></label>
+      </div>
+      <div class="row">
+        <label>Qualifying rate <input id="bRate" value="Floating"></label>
+        <label>ARIVE loan # (optional) <input id="bLoanNo"></label>
+      </div>
+      <details>
+        <summary>Document checklist printed on the letter</summary>
+        <div class="docs" id="docGrid" style="margin-top:10px"></div>
+      </details>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="primary" type="submit" id="bSave">Save borrower</button>
+        <button class="ghost" type="button" id="bCancel">Cancel</button>
+      </div>
+      <p class="msg" id="bMsg" aria-live="polite"></p>
+    </form>
+    <div class="tablebox"><table>
+      <thead><tr><th>Borrower</th><th>Program</th><th>Max price</th><th>Max loan</th><th>Max LTV</th><th>Expires</th><th></th></tr></thead>
+      <tbody id="bRows"></tbody>
+    </table></div>
+    <p class="empty" id="bEmpty">Loading approved borrowers…</p>
+  </section>
+
+  <section class="panel" aria-labelledby="logH">
+    <h2 id="logH">Letters sent</h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Created</th><th>Borrower</th><th>Price</th><th>Down</th><th>Loan</th><th>LTV</th><th>Expires</th></tr></thead>
+      <tbody id="lRows"></tbody>
+    </table></div>
+    <p class="empty" id="lEmpty">No letters yet. Each letter you create is logged here for your records.</p>
+  </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const DOCS = [
+  "Pay stubs from most recent pay period of at least 30 days",
+  "Bank statements from the past two months ALL pages",
+  "Most recent two years W2 Statements",
+  "Most recent two years Tax Returns",
+  "Drivers License",
+  "Appraisal of subject property which meets AIR compliance",
+  "Satisfactory Preliminary Title Report on subject property",
+  "Copy of current mortgage statement (if applicable)",
+  "Copy of current homeowners insurance policy (if applicable)",
+  "Copy of Pension Award Letter (if applicable)",
+  "Copy of Social Security Award Letter (if applicable)",
+  "Other"
+];
+// PDF field map: "Check Box13".."24" = Verified column, "Check Box1".."12" = Need column.
+const DEFAULT_VERIFIED = [0,1,2,3,4], DEFAULT_NEED = [5,6];
+
+const money = n => isFinite(n) ? n.toLocaleString("en-US", {style:"currency", currency:"USD"}) : "—";
+const money0 = n => isFinite(n) ? n.toLocaleString("en-US", {style:"currency", currency:"USD", maximumFractionDigits:0}) : "—";
+const num = s => { if (s == null) return NaN; s = String(s).trim().toLowerCase().replace(/[$,\s%]/g, "");
+  let m = 1; if (s.endsWith("k")) { m = 1e3; s = s.slice(0,-1) } else if (s.endsWith("m")) { m = 1e6; s = s.slice(0,-1) }
+  const v = parseFloat(s); return isFinite(v) ? v * m : NaN };
+const iso = d => d.toISOString().slice(0,10);
+const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return iso(d) };
+const addDays = (s, n) => { const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() + n); return iso(d) };
+const usDate = s => { if (!s) return ""; const [y,m,d] = s.split("-"); return `${m}/${d}/${y}` };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+let db = null, user = null, downloads = null;
+let borrowers = [];     // [{id, ...data}]
+let downUnit = "pct";
+let lastPdf = null, lastName = "";
+let editingId = null;
+
+// ---------- request form ----------
+$("letterDate").value = today();
+$("expDate").value = addDays(today(), 90);
+function setUnit(u) { downUnit = u; $("unitPct").setAttribute("aria-pressed", u === "pct"); $("unitAmt").setAttribute("aria-pressed", u === "amt"); evaluate() }
+$("unitPct").onclick = () => setUnit("pct"); $("unitAmt").onclick = () => setUnit("amt");
+["borrower","price","down","letterDate","expDate"].forEach(id => $(id).addEventListener("input", evaluate));
+$("confirm").addEventListener("change", evaluate);
+
+function currentBorrower() {
+  const v = $("borrower").value.trim().toLowerCase();
+  if (!v) return null;
+  return borrowers.find(b => b.name.toLowerCase() === v) || null;
+}
+function calc() {
+  const price = num($("price").value);
+  const d = num($("down").value);
+  const down = downUnit === "pct" ? price * d / 100 : d;
+  const loan = Math.round((price - down) * 100) / 100;
+  const ltv = price > 0 ? loan / price * 100 : NaN;
+  return { price, down, downPct: price > 0 ? down / price * 100 : NaN, loan, ltv };
+}
+let ready = false;
+function evaluate() {
+  const b = currentBorrower();
+  const c = calc();
+  const items = [];
+  let pass = true;
+  const add = (ok, text, warn) => { items.push([ok ? "ok" : (warn ? "warn" : "bad"), text]); if (!ok && !warn) pass = false };
+
+  // keep letter expiry within the approval
+  if (b && b.expiresOn && $("expDate").value > b.expiresOn) $("expDate").value = b.expiresOn;
+
+  if (!b) { add(false, $("borrower").value.trim() ? "Not on the approved list. Add them below once ARIVE shows an approval." : "Pick an approved borrower to start.", !$("borrower").value.trim()); pass = false }
+  if (!(c.price > 0)) { add(false, "Enter the purchase price.", true); pass = false }
+  if (!(c.down >= 0) || !(c.loan > 0)) { add(false, "Enter the down payment.", true); pass = false }
+
+  $("fLoan").textContent = c.loan > 0 ? money0(c.loan) : "—";
+  $("fLtv").textContent = isFinite(c.ltv) && c.loan > 0 ? c.ltv.toFixed(2) + "%" : "—";
+  $("fProg").textContent = b ? b.loanType : "—";
+
+  if (b && c.price > 0 && c.loan > 0) {
+    add(c.price <= b.maxPrice, `Price ${money0(c.price)} ${c.price <= b.maxPrice ? "is within" : "is over"} the approved max of ${money0(b.maxPrice)}`);
+    add(c.loan <= b.maxLoan, `Loan ${money0(c.loan)} ${c.loan <= b.maxLoan ? "is within" : "is over"} the approved max of ${money0(b.maxLoan)}`);
+    add(c.ltv <= b.maxLtv + 1e-9, `LTV ${c.ltv.toFixed(2)}% ${c.ltv <= b.maxLtv + 1e-9 ? "is within" : "is over"} the approved max of ${b.maxLtv}%`);
+    const t = today();
+    add(b.expiresOn >= t, b.expiresOn >= t ? `Approval is current until ${usDate(b.expiresOn)}` : `Approval expired on ${usDate(b.expiresOn)}. Refresh it in ARIVE first.`);
+  }
+  if ($("expDate").value && $("letterDate").value && $("expDate").value < $("letterDate").value) add(false, "Letter expiry is before the letter date.");
+  ready = pass;
+  $("checks").innerHTML = items.map(([k, t]) => `<li class="${k}"><span>${k === "ok" ? "✓" : k === "bad" ? "✕" : "•"}</span><span>${esc(t)}</span></li>`).join("");
+  $("make").disabled = !(pass && $("confirm").checked);
+}
+
+// ---------- PDF ----------
+let templateBytes = null;
+async function getTemplate() {
+  if (!templateBytes) { const r = await fetch("preapproval-template.pdf"); if (!r.ok) throw new Error("Letter template did not load"); templateBytes = await r.arrayBuffer() }
+  return templateBytes;
+}
+async function buildPdf(b, c) {
+  const { PDFDocument } = PDFLib;
+  const pdf = await PDFDocument.load(await getTemplate());
+  const form = pdf.getForm();
+  const setT = (n, v) => { try { form.getTextField(n).setText(v) } catch (e) { console.warn("field", n, e) } };
+  setT("Date", usDate($("letterDate").value));
+  setT("Date_1", usDate($("expDate").value));
+  setT("Buyer", b.name);
+  setT("Sales Price", money(c.price));
+  setT("Loan Amount", money(c.loan));
+  setT("Max LTV", c.ltv.toFixed(2) + "%");
+  setT("Loan Type", b.loanType);
+  setT("Qualifying Interest Rate", b.rate || "Floating");
+  setT("Loan Term", b.term || "30 Year Fixed");
+  const ver = b.verified || DEFAULT_VERIFIED, need = b.need || DEFAULT_NEED;
+  for (let i = 0; i < 12; i++) {
+    const v = form.getCheckBox("Check Box" + (13 + i)), n = form.getCheckBox("Check Box" + (1 + i));
+    ver.includes(i) ? v.check() : v.uncheck();
+    need.includes(i) ? n.check() : n.uncheck();
+  }
+  setT("Other", b.other || "");
+  form.flatten();   // realtor gets a locked letter, not an editable form
+  pdf.setTitle("Pre-Approval Letter - " + b.name);
+  return await pdf.save();
+}
+async function savePdf() {
+  if (!lastPdf) return;
+  if (!downloads) { $("makeMsg").textContent = "Saving files isn't available in this view. Open the page in a browser while signed in to claude.ai."; $("makeMsg").className = "msg err"; return }
+  try {
+    await downloads.save({ filename: lastName, data: new Blob([lastPdf], {type: "application/pdf"}) });
+    $("makeMsg").textContent = `Saved ${lastName}. Attach it to your reply to the realtor.`; $("makeMsg").className = "msg";
+  } catch (e) {
+    $("makeMsg").textContent = e && e.code === "declined" ? "Save cancelled." : "The PDF could not be saved: " + (e && e.message || e); $("makeMsg").className = "msg err";
+  }
+}
+$("make").onclick = async () => {
+  const b = currentBorrower(), c = calc();
+  if (!ready || !b) return;
+  $("make").disabled = true; $("makeMsg").className = "msg"; $("makeMsg").textContent = "Building the letter…";
+  try {
+    lastPdf = await buildPdf(b, c);
+    lastName = `Pre-Approval ${b.name.replace(/[^\w &-]/g, "")} ${money0(c.price).replace(/[$,]/g, "")}.pdf`;
+    const first = b.name.split(/[ &]/)[0];
+    $("emailText").value =
+`Hi,
+
+Attached is the pre-approval letter for ${b.name} at a purchase price of ${money0(c.price)} with ${c.downPct.toFixed(1).replace(/\.0$/, "")}% down (${b.loanType}, ${b.term || "30 Year Fixed"}).${$("note").value.trim() ? "\n\n" + $("note").value.trim() : ""}
+
+The letter is valid through ${usDate($("expDate").value)}. Call or text me anytime with questions.
+
+Stephanie Cramm
+That Mortgage Couple | Xpert Home Lending
+(303) 931-6776 | NMLS #243972`;
+    $("sendBox").hidden = false;
+    if (db) {
+      try {
+        await db.collection("letters").add({ borrowerId: b.id, borrower: b.name, price: c.price, down: Math.round(c.down*100)/100, downPct: Math.round(c.downPct*100)/100,
+          loan: c.loan, ltv: Math.round(c.ltv*100)/100, loanType: b.loanType, letterDate: $("letterDate").value, expires: $("expDate").value,
+          note: $("note").value.trim(), createdAt: new Date().toISOString(), createdBy: user ? await user.id().catch(() => null) : null });
+      } catch (e) { console.warn("log", e) }
+    }
+    await savePdf();
+  } catch (e) {
+    $("makeMsg").textContent = "The letter could not be built: " + (e && e.message || e); $("makeMsg").className = "msg err";
+  }
+  $("confirm").checked = false; evaluate();
+};
+$("saveAgain").onclick = savePdf;
+$("copyEmail").onclick = async () => {
+  try { await navigator.clipboard.writeText($("emailText").value); $("copyEmail").textContent = "Copied" ; setTimeout(() => $("copyEmail").textContent = "Copy email text", 1500) }
+  catch { $("emailText").select() }
+};
+
+// ---------- approved borrowers ----------
+const docGrid = $("docGrid");
+docGrid.innerHTML = `<span class="h">Document</span><span class="h">Verified</span><span class="h">Need</span>` +
+  DOCS.map((d, i) => `<span>${esc(d)}</span><input type="checkbox" id="dv${i}" aria-label="${esc(d)} verified"><input type="checkbox" id="dn${i}" aria-label="${esc(d)} needed">`).join("");
+function openForm(b) {
+  editingId = b ? b.id : null;
+  $("bForm").hidden = false; $("bMsg").textContent = "";
+  $("bName").value = b?.name || ""; $("bType").value = b?.loanType || "Conventional";
+  $("bMaxPrice").value = b ? b.maxPrice.toLocaleString() : ""; $("bMaxLoan").value = b ? b.maxLoan.toLocaleString() : "";
+  $("bMaxLtv").value = b?.maxLtv ?? ""; $("bTerm").value = b?.term || "30 Year Fixed"; $("bRate").value = b?.rate || "Floating";
+  $("bApproved").value = b?.approvedOn || today(); $("bExpires").value = b?.expiresOn || addDays(today(), 90); $("bLoanNo").value = b?.loanNumber || "";
+  const ver = b?.verified || DEFAULT_VERIFIED, need = b?.need || DEFAULT_NEED;
+  DOCS.forEach((_, i) => { $("dv" + i).checked = ver.includes(i); $("dn" + i).checked = need.includes(i) });
+  $("bSave").textContent = b ? "Save changes" : "Save borrower";
+  $("bName").focus();
+}
+$("newB").onclick = () => openForm(null);
+$("bCancel").onclick = () => { $("bForm").hidden = true };
+$("bForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const body = {
+    name: $("bName").value.trim(), loanType: $("bType").value,
+    maxPrice: num($("bMaxPrice").value), maxLoan: num($("bMaxLoan").value), maxLtv: num($("bMaxLtv").value),
+    term: $("bTerm").value.trim(), rate: $("bRate").value.trim(),
+    approvedOn: $("bApproved").value, expiresOn: $("bExpires").value, loanNumber: $("bLoanNo").value.trim(),
+    verified: DOCS.map((_, i) => i).filter(i => $("dv" + i).checked),
+    need: DOCS.map((_, i) => i).filter(i => $("dn" + i).checked),
+    updatedAt: new Date().toISOString()
+  };
+  if (!body.name || !(body.maxPrice > 0) || !(body.maxLoan > 0) || !(body.maxLtv > 0) || !body.expiresOn) {
+    $("bMsg").textContent = "Name, max price, max loan, max LTV and approval expiry are all required."; $("bMsg").className = "msg err"; return }
+  if (!db) { $("bMsg").textContent = "Saving needs you to be signed in to claude.ai."; $("bMsg").className = "msg err"; return }
+  try {
+    const ref = editingId ? db.collection("borrowers").doc(editingId) : db.collection("borrowers").doc();
+    await ref.set(body);
+    $("bForm").hidden = true;
+  } catch (err) { $("bMsg").textContent = "Couldn't save: " + (err.message || err.code); $("bMsg").className = "msg err" }
+});
+function renderBorrowers() {
+  $("borrowerList").innerHTML = borrowers.map(b => `<option value="${esc(b.name)}"></option>`).join("");
+  const t = today();
+  $("bRows").innerHTML = borrowers.map(b => `<tr>
+    <td>${esc(b.name)}</td><td>${esc(b.loanType)}</td><td class="num">${money0(b.maxPrice)}</td><td class="num">${money0(b.maxLoan)}</td>
+    <td class="num">${b.maxLtv}%</td><td><span class="pill ${b.expiresOn >= t ? "ok" : "bad"}">${usDate(b.expiresOn)}</span></td>
+    <td><button class="tbtn" data-use="${esc(b.id)}">Use</button> · <button class="tbtn" data-edit="${esc(b.id)}">Edit</button></td></tr>`).join("");
+  $("bEmpty").hidden = borrowers.length > 0;
+  $("bEmpty").textContent = "No approved borrowers yet. Add one when a pre-approval is issued in ARIVE.";
+  evaluate();
+}
+$("bRows").addEventListener("click", e => {
+  const u = e.target.dataset.use, ed = e.target.dataset.edit;
+  if (u) { const b = borrowers.find(x => x.id === u); $("borrower").value = b.name; evaluate(); $("price").focus() }
+  if (ed) openForm(borrowers.find(x => x.id === ed));
+});
+function renderLetters(rows) {
+  $("lRows").innerHTML = rows.map(l => `<tr><td>${esc(new Date(l.createdAt).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}))}</td>
+    <td>${esc(l.borrower)}</td><td class="num">${money0(l.price)}</td><td class="num">${l.downPct}%</td><td class="num">${money0(l.loan)}</td><td class="num">${l.ltv}%</td><td>${usDate(l.expires)}</td></tr>`).join("");
+  $("lEmpty").hidden = rows.length > 0;
+}
+
+
+// ---------- shared data (Supabase, staff sign-in) ----------
+const SUPABASE_URL = "https://qrtyewmkarwtphcoqlko.supabase.co";
+const SUPABASE_KEY = "sb_publishable_8lBhstmey8uIbNnJelcbqQ_H8WpOHKT"; // publishable key: safe in a browser, data is protected by row-level security
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TABLES = { borrowers: "preapproval_borrowers", letters: "preapproval_letters" };
+const subs = {};
+async function refresh(name) { for (const f of subs[name] || []) await f() }
+function makeColl(name) {
+  let ord = null, dir = "asc", lim = 500;
+  const q = {
+    orderBy(f, d) { ord = f; dir = d || "asc"; return q }, limit(n) { lim = n; return q },
+    onSnapshot(cb, err) {
+      const run = async () => {
+        let r = sb.from(TABLES[name]).select("id,data");
+        r = r.order(name === "letters" ? "created_at" : "name", { ascending: dir !== "desc" }).limit(lim);
+        const { data, error } = await r;
+        if (error) { err && err({ message: error.message }); return }
+        cb({ metadata: { fromCache: false }, docs: data.map(x => ({ id: x.id, data: () => x.data })) });
+      };
+      (subs[name] = subs[name] || []).push(run); run(); return () => {};
+    },
+    doc(id) { return { id, set: async d => {
+        const row = { data: d }; if (name === "borrowers") row.name = d.name;
+        const t = sb.from(TABLES[name]);
+        const { error } = id ? await t.update(row).eq("id", id) : await t.insert(row);
+        if (error) throw new Error(error.message); await refresh(name) } } },
+    add: async d => { await q.doc().set(d) }
+  };
+  return q;
+}
+function saveFile(name, blob) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 4000) }
+downloads = { save: async ({ filename, data }) => {
+  const file = new File([data], filename, { type: "application/pdf" });
+  // On a phone, open the share sheet so the PDF can go straight into Mail or Messages
+  if (navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia("(pointer: coarse)").matches) {
+    try { await navigator.share({ files: [file], title: filename }); return { status: "delivered" } }
+    catch (e) { if (e.name === "AbortError") throw { code: "declined" } }
+  }
+  saveFile(filename, data); return { status: "saved" } } };
+window.addEventListener("focus", () => { if (db) { refresh("borrowers"); refresh("letters") } });
+
+function showApp(on) { $("app").hidden = !on; $("vLogin").hidden = on }
+async function startSession(session) {
+  if (!session) { showApp(false); return }
+  const { data: ok } = await sb.rpc("is_staff");
+  if (!ok) { showApp(false); $("loginStatus").textContent = "This login isn't set up as staff yet. Ask David to add you."; return }
+  $("who").innerHTML = esc(session.user.email) + ' · <button class="tbtn" id="signOut">Sign out</button>';
+  $("signOut").onclick = async () => { await sb.auth.signOut(); location.reload() };
+  if (db) return;
+  db = { collection: makeColl };
+  showApp(true);
+  db.collection("borrowers").orderBy("name").onSnapshot(s => { borrowers = s.docs.map(d => ({ id: d.id, ...d.data() })); renderBorrowers() },
+    err => { $("bEmpty").textContent = "Approved borrowers couldn't load: " + err.message + ". If this is the first run, the database step may still be needed." });
+  db.collection("letters").orderBy("createdAt", "desc").limit(50).onSnapshot(s => renderLetters(s.docs.map(d => d.data())), () => {});
+}
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault(); $("loginStatus").textContent = "Signing in…";
+  const { data, error } = await sb.auth.signInWithPassword({ email: $("loginEmail").value.trim(), password: $("loginPw").value });
+  if (error) { $("loginStatus").textContent = error.message === "Invalid login credentials" ? "That email and password don't match. Use the same login as the loan comparison workspace." : error.message; return }
+  startSession(data.session);
+});
+evaluate();
+(async () => { const { data } = await sb.auth.getSession(); startSession(data.session) })();
+})();
+</script>
+</body></html>
