@@ -1662,7 +1662,7 @@ function noteBasics(text) {
     let q = p.replace(/^(?:buyers?|borrowers?|clients?|names?|for)\s*[:\-]?\s+/i, "");
     // "Stephanie Jones Purchase": keep the name, drop the loan words after it (needs two name words first, so "Eagle County" isn't a name)
     const qw = q.split(/\s+/), cut = qw.findIndex((w) => NAME_STOP.test(w.replace(/[.]/g, "")));
-    if (cut >= 2 && qw.slice(0, cut).every((w) => /^[a-z][a-z.'-]*$|^&$|^and$/i.test(w))) q = qw.slice(0, cut).join(" ");
+    if (cut >= 2 && qw.slice(0, cut).every((w) => /^[a-z][a-z.'-]*$|^&$|^and$/i.test(w))) q = qw.slice(0, cut).join(" ").replace(/(?:\s+(?:and|&))+$/i, "");
     const qws = q.split(/\s+/), lastW = qws[qws.length - 1];
     const place = qws.length > 1 && (US_STATES.includes(lastW.toUpperCase().replace(/\./g, "")) && lastW === lastW.toUpperCase() || STATE_WORDS.test(lastW)) || qws.some((w) => STATE_WORDS.test(w) && w !== "New");
     if (!name && !place && /^[a-z][a-z .'&-]+$/i.test(q) && !qws.some((w) => NAME_STOP.test(w)) && !US_STATES.includes(q.toUpperCase())) name = q;
