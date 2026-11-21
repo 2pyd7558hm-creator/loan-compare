@@ -1373,6 +1373,7 @@ async function loadFeeTemplates() {
   if (error || !data || !data.length) { tplFromDb = !error && !!data; feeTemplates = DEFAULT_FEE_TEMPLATES.slice(); }
   else { tplFromDb = true; feeTemplates = data; }
   fillFeeTemplateSelect();
+  if (!$("tplManageBox").hidden && !tplEdit) { drawTplList(); if (tplFromDb) say("tplManageStatus", ""); }
   if (!current && !(state.closing && state.closing.template)) applyDefaultTemplate();
 }
 $("tplSaveOpen").addEventListener("click", () => {
@@ -1406,7 +1407,7 @@ $("tplDelBtn").addEventListener("click", async () => {
 });
 
 // Manage: list every template with Edit and Delete; Edit opens the template's fees right here, Delete asks first
-let tplEdit = null; // { i, name, state, items } while a template is being edited
+var tplEdit = null; // { i, name, state, items } while a template is being edited
 const AUTO_FEE = /hazard.*premium|insurance premium|hazard.*reserve|insurance reserve|tax.*reserve|deed|transfer|stamp|documentary/i;
 function drawTplList() {
   $("tplList").innerHTML = feeTemplates.length ? feeTemplates.map((t, i) => tplEdit && tplEdit.i === i ? tplEditor(i) : `<div class="tpl-row" data-t="${i}">
