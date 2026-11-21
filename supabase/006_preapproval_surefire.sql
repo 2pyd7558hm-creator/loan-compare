@@ -3,3 +3,5 @@
 -- The function writes with the service role; staff see the rows through the policies in 005.
 alter table public.preapproval_borrowers add column if not exists surefire_id text;
 create unique index if not exists preapproval_borrowers_surefire_idx on public.preapproval_borrowers (surefire_id) where surefire_id is not null;
+-- The receiver writes with the service role, which this project does not grant on new tables automatically.
+grant select, insert, update on public.preapproval_borrowers to service_role;
