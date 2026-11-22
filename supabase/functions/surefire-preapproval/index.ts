@@ -63,6 +63,8 @@ function term(c: Record<string, unknown>) {
   return arm ? `${yrs} Year ARM${str(c.loanARMProgram) ? " (" + str(c.loanARMProgram) + ")" : ""}` : `${yrs} Year Fixed`;
 }
 
+const CLOSING = /FUNDED|CLOSED|WITHDRAW|DENIED|DECLIN|CANCEL|ADVERSE|INCOMPLETE|DEAD|LOST/;
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return reply(405, { error: "POST only" });
   if (!authorized(req)) return reply(401, { error: "unauthorized" });
@@ -86,6 +88,16 @@ Deno.serve(async (req) => {
     if (surefireId) existing = (await sb.from("preapproval_borrowers").select("id,data").eq("surefire_id", surefireId).maybeSingle()).data;
     if (!existing && losGuid) existing = (await sb.from("preapproval_borrowers").select("id,data").eq("data->>losGuid", losGuid).limit(1).maybeSingle()).data;
     const prev = (existing?.data ?? {}) as Record<string, unknown>;
+    // Loan finished (funded, closed, withdrawn, denied...): archive the borrower, keep the row and its letter log
+    const status = str(c.loanStatus).toUpperCase();
+    if (CLOSING.test(status)) {
+      if (!existing) { results.push({ surefireId, losGuid, skipped: "closing status for a borrower not in the desk" }); continue; }
+      const { error } = await sb.from("preapproval_borrowers").update({
+        data: { ...prev, archived: true, archivedAt: today.toISOString(), archivedReason: "Arrive status " + status, updatedAt: today.toISOString() },
+      }).eq("id", existing.id);
+      results.push(error ? { surefireId, losGuid, error: error.message } : { surefireId, losGuid, ok: true, archived: true });
+      continue;
+    }
     const data = {
       ...prev,
       name: borrowerName(c),
@@ -109,6 +121,7 @@ Deno.serve(async (req) => {
         owner: str((c.user as Record<string, unknown> | undefined)?.fullName),
       },
       needsReview: true,                                       // every import (and every change) must be confirmed by staff
+      archived: false, archivedAt: null, archivedReason: null,  // a new pre-approval brings an archived borrower back
       updatedAt: today.toISOString(),
     };
     const row: Record<string, unknown> = { name: data.name, data };
