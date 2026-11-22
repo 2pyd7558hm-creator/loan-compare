@@ -28,7 +28,21 @@ const OPTION = {
 };
 const DRAFT_KEYS = ["refi", "condo", "jumbo_all", "price", "state", "county", "options", "seller_credit_all", "dpa_amount", "dpa_rate",
   "rent", "income", "extra_monthly", "extra_payments_per_year", "cost_of_waiting", "debts", "extra_payments",
-  "arm_vs_fixed", "bid_over_asking", "equity", "investment", "paying_cash", "credit_reports", "assumptions"];
+  "arm_vs_fixed", "bid_over_asking", "equity", "investment", "paying_cash", "credit_reports", "facts", "assumptions"];
+// Numbers the calculator tabs need, read from the note. 0 (or "" / empty list) means not stated.
+const DEBT = { type: "object", additionalProperties: false, properties: { name: S, balance: N, rate: N, payment: N }, required: ["name", "balance", "rate", "payment"] };
+const FACT_KEYS = ["current_balance", "current_rate", "current_years_left", "second_balance", "cash_out", "irrrl", "debts_paid_off", "monthly_debts",
+  "cash_for_down", "hoa_monthly", "wait_months", "rate_if_wait", "hoped_rate", "bid_over", "savings", "investments", "retirement", "under_59"];
+const FACTS = {
+  type: "object", additionalProperties: false,
+  properties: {
+    current_balance: N, current_rate: N, current_years_left: N, second_balance: N, cash_out: N, irrrl: B,
+    debts_paid_off: { type: "array", items: DEBT }, monthly_debts: N, cash_for_down: N, hoa_monthly: N,
+    wait_months: N, rate_if_wait: N, hoped_rate: N, bid_over: N, savings: N, investments: N, retirement: N,
+    under_59: { type: "integer", enum: [-1, 0, 1] },
+  },
+  required: FACT_KEYS,
+};
 const SCHEMA = {
   type: "object", additionalProperties: false,
   properties: {
@@ -42,6 +56,7 @@ const SCHEMA = {
         seller_credit_all: N, dpa_amount: N, dpa_rate: N, rent: N, income: N, extra_monthly: N, extra_payments_per_year: N,
         cost_of_waiting: B, debts: B, extra_payments: B, arm_vs_fixed: B, bid_over_asking: B, equity: B, investment: B, paying_cash: B,
         credit_reports: { type: "integer" },
+        facts: FACTS,
         assumptions: { type: "array", items: S },
       },
       required: DRAFT_KEYS,
@@ -54,6 +69,16 @@ const pos = (v: unknown) => typeof v === "number" && v > 0 ? v : null;
 const nonneg = (v: unknown) => typeof v === "number" && v >= 0 ? v : null;
 const txt = (v: unknown) => typeof v === "string" && v.trim() ? v.trim() : null;
 // deno-lint-ignore no-explicit-any
+function normFacts(f: any) {
+  // deno-lint-ignore no-explicit-any
+  const out: any = {};
+  for (const k of FACT_KEYS) out[k] = k === "irrrl" ? f[k] === true : k === "under_59" ? (f[k] === 1 ? true : f[k] === 0 ? false : null) : k === "debts_paid_off" ? [] : pos(f[k]);
+  out.debts_paid_off = (Array.isArray(f.debts_paid_off) ? f.debts_paid_off : []).slice(0, 8)
+    // deno-lint-ignore no-explicit-any
+    .filter((x: any) => pos(x.balance)).map((x: any) => ({ name: txt(x.name) || "Debt", balance: pos(x.balance), rate: pos(x.rate), payment: pos(x.payment) }));
+  return out;
+}
+// deno-lint-ignore no-explicit-any
 function normalize(out: any) {
   if (out.kind === "question" && txt(out.question)) return { kind: "question", question: txt(out.question), draft: null };
   const d = out.draft || {};
@@ -62,6 +87,7 @@ function normalize(out: any) {
     draft: {
       ...d, price: pos(d.price), state: txt(d.state), county: txt(d.county),
       seller_credit_all: pos(d.seller_credit_all), dpa_amount: pos(d.dpa_amount), dpa_rate: pos(d.dpa_rate), rent: pos(d.rent), income: pos(d.income),
+      facts: normFacts(d.facts || {}),
       extra_monthly: pos(d.extra_monthly), extra_payments_per_year: pos(d.extra_payments_per_year), credit_reports: Math.max(1, Math.min(4, Math.round(+d.credit_reports || 1))), assumptions: Array.isArray(d.assumptions) ? d.assumptions : [],
       // deno-lint-ignore no-explicit-any
       options: (Array.isArray(d.options) ? d.options : []).slice(0, 4).map((o: any) => ({
@@ -89,6 +115,16 @@ Fill the draft like this:
 - state: two-letter code, "" if not stated. county: the county name without the word "County", "" if not stated.
 - refi: true for a refinance. condo: true for a condo.
 - Calculators to add, true only when the note asks for or clearly implies them: cost_of_waiting ("wait", "waiting"), debts (paying off debts, consolidation), extra_payments (extra or faster payoff; also set extra_monthly in dollars or extra_payments_per_year as a count), arm_vs_fixed (an ARM compared with a fixed loan), bid_over_asking (offering over asking), equity (equity or appreciation), investment (rental or investment property), paying_cash (paying cash, an all-cash purchase or a cash offer). rent and income are monthly rent and yearly income in dollars when stated. Any number not stated is 0.
+- facts: numbers for the calculator tabs, only when the note states them (0, false, -1 or an empty list otherwise). Dollars are whole dollars ("410" next to a home value means 410000; "1.2M" = 1200000); rates are percents.
+  - Refinance or debt consolidation: current_balance (what they owe on the first mortgage), current_rate (that loan's rate), current_years_left, second_balance (a second mortgage or HELOC being paid off; 0 if none), cash_out (cash they want back at closing), irrrl (true for a VA IRRRL / VA streamline), debts_paid_off (each card, car loan, student loan or other debt being paid off: name like "Credit cards", "Car loan", balance, rate, monthly payment). The current loan's rate is never a loan option, and neither is a rate they're hoping for.
+  - Affordability: monthly_debts (their monthly debt payments, e.g. car 450 + student loans 300 = 750), cash_for_down (cash they have for the down payment and closing, e.g. "40k down", "15k saved").
+  - hoa_monthly: HOA dues per month.
+  - Cost of waiting: wait_months ("wait 6 months" = 6, "a year" = 12), rate_if_wait (the rate if they buy later), hoped_rate (on a refinance, the lower rate they're waiting for).
+  - Bid over asking: bid_over in dollars ("20k over asking" = 20000; convert a percent using the asking price). price is what they'd pay: the asking price plus bid_over.
+  - Paying cash: savings (savings and checking), investments (brokerage), retirement (401k or IRA), under_59: 1 if the person taking money from retirement is under 59 and a half (from an age or a statement), 0 if 59 and a half or older, -1 if unknown.
+- Refinance: price is the home value. For each option, down_pct is 100 minus the loan as a percent of the value when you can tell the loan (balance + second + debts paid off + cash out); otherwise -1.
+- Investment ("investment", "inv prop", "rental", "NOO", "non-owner"): set investment true; rent is the property's monthly rent (add the units' rents together).
+- A note that gives only a down payment and/or a rate and/or a term ("10 dn 6.75") describes ONE option; don't return an empty options list for it.
 - credit_reports: how many separate credit reports the borrowers need. 1 for one borrower, or for a married or partnered couple (one joint report). Each co-borrower who isn't the borrower's spouse or partner adds one ("me and my mom", "two brothers", "my friend and I", "with my dad as co-borrower" = 2; "me, my wife and my mom" = 2). Someone only giving gift money or helping isn't a borrower. Use 1 unless the note clearly says so.
 - assumptions: short plain-English notes about anything you had to read loosely, for the loan officer to check. Empty if none.
 

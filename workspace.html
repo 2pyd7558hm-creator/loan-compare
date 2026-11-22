@@ -522,7 +522,7 @@ body.readonly .calc-in select { pointer-events: none; background: var(--soft) }
   <section id="homeSec" class="calc-compare">
     <h2>The home</h2>
     <div class="panel fields">
-      <label class="f">Purchase price<div class="affix pre"><span>$</span><input id="price" type="number" min="0" step="1000"></div></label>
+      <label class="f"><span id="priceLbl">Purchase price</span><div class="affix pre"><span>$</span><input id="price" type="number" min="0" step="1000"></div></label>
       <label class="f">Property taxes / yr<div class="affix pre"><span>$</span><input id="taxes" type="number" min="0" step="100"></div><span class="tax-hint" id="taxesHint"></span></label>
       <label class="f">Home insurance / yr<div class="affix pre"><span>$</span><input id="insurance" type="number" min="0" step="100"></div><span class="tax-hint" id="insuranceHint"></span></label>
       <label class="f">HOA dues / mo<div class="affix pre"><span>$</span><input id="hoa" type="number" min="0" step="10"></div></label>
@@ -669,6 +669,8 @@ function fhaMip(baseLoan, value, termYrs) {
 }
 // VA funding fee for a purchase, first use, by down payment (va.gov, effective April 7, 2023). Subsequent use under 5% down is 3.3%.
 function vaFee(downPct) { return downPct >= 10 ? 1.25 : downPct >= 5 ? 1.5 : 2.15; }
+// On a refinance the down payment doesn't apply: a VA cash-out refinance is 2.15% (first use) and an IRRRL (VA streamline) is 0.5%
+function vaFeeFor(downPct) { return isRefiFile() ? (state.irrrl ? 0.5 : 2.15) : vaFee(downPct); }
 // Starting PMI rate for conventional loans (borrower-paid monthly, good credit). An estimate the loan officer can change on the card.
 // Most a seller can pay toward the buyer's costs, as a share of the price (interested party contribution limits):
 // conventional 3% over 90% LTV, 6% at 75-90%, 9% at 75% or less; FHA 6%; VA 4% (VA doesn't count normal closing costs toward it). Jumbo varies by lender.
@@ -711,7 +713,7 @@ function analyze(s) {
   const down = value * s.downPct / 100;
   const base = Math.max(value - down, 0);
   const fha = s.type === "fha" ? fhaMip(base, value, s.term) : null;
-  const financed = fha ? base * 0.0175 : s.type === "va" ? base * vaFee(s.downPct) / 100 : 0;
+  const financed = fha ? base * 0.0175 : s.type === "va" ? base * vaFeeFor(s.downPct) / 100 : 0;
   const loan = base + financed;
   const n = s.term * 12, r = s.rate / 1200;
   const pi = loan === 0 ? 0 : r ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n;
@@ -766,8 +768,13 @@ function analyze(s) {
   }
   const escrow = state.taxes / 12 + state.insurance / 12 + state.hoa;
   const total = pi + (firstMI || 0) + escrow + pi2;
+  // A refinance has no down payment: the new loan pays off what's owed (state.payoff, when known), the costs are paid at
+  // closing, and anything left over is cash back. With no payoff known the loan is taken to be what's owed.
+  const refi = isRefiFile(), left = refi && state.payoff > 0 ? base - state.payoff : 0;
+  const cashToClose = refi ? Math.max(0, costs - credit - left) : Math.max(0, down - amt2 + costs - credit);
+  const cashBack = refi ? Math.max(0, left - costs + credit) : 0;
   return { s, down, loan, financed, pi, mi: firstMI || 0, escrow, total, pay1: bd ? total - pi + bdPay[0] : total, bd, bdPay, bdCost, amt2, pi2, credit, creditUnused: creditAsked - credit,
-           pointsCost, cc, lenderFees: s.fees + cc.apr, cashToClose: Math.max(0, down - amt2 + costs - credit), apr, bal, cost, equity, n };
+           pointsCost, cc, lenderFees: s.fees + cc.apr, cashToClose, cashBack, refi, apr, bal, cost, equity, n };
 }
 
 /* ---------- Closing costs (itemized from a fee template) ---------- */
@@ -1001,6 +1008,8 @@ function render() {
   state.scenarios.forEach((s, i) => syncMI(i));
   const res = state.scenarios.map(analyze);
   renderClosing(res[0]);
+  const refiNow = isRefiFile(), anyBack = res.some((r) => r.cashBack > 0.5);
+  $("priceLbl").textContent = refiNow ? "Home value" : "Purchase price";
   const h = state.horizon * 12;
   const base = res[0];
   [...$("horizon").children].forEach((b) => b.setAttribute("aria-pressed", +b.dataset.y === state.horizon));
@@ -1028,6 +1037,7 @@ function render() {
     ${row("Interest rate", (r) => pct(r.s.rate))}
     ${row("APR (estimated)", (r) => pct(r.apr))}
     ${row("Loan amount", (r) => usd.format(r.loan) + (r.financed ? `<div style="font-size:12px;color:var(--muted)">incl. ${usd.format(r.financed)} financed</div>` : ""))}
+    ${refiNow ? row("Loan-to-value", (r) => pct(state.price > 0 ? (r.loan - r.financed) / state.price * 100 : 0, 1)) : ""}
     ${any2 ? row("2nd loan / DPA", (r) => r.amt2 ? usd.format(r.amt2) + `<div style="font-size:12px;color:var(--muted)">${r.pi2 ? `${pct(+r.s.rate2 || 0)} · ${r.s.term2} yrs` : "deferred"}</div>` : "None") : ""}
     ${group("Monthly")}
     ${row("Principal &amp; interest", (r) => usd.format(r.pi))}
@@ -1037,7 +1047,7 @@ function render() {
     ${row("Total monthly payment", (r) => usd.format(r.total), bPay, "strong")}
     ${anyBd ? row("Payment during buydown", (r) => r.bd ? r.bdPay.map((x, y) => `Yr ${y + 1}: ${usd.format(r.total - r.pi + x)}`).join("<br>") : "No buydown") : ""}
     ${group("Cash to close")}
-    ${row("Down payment", (r) => `${usd.format(r.down)} <span style="color:var(--muted)">(${pct(r.s.downPct, 2)})</span>`)}
+    ${refiNow ? (state.payoff > 0 ? row("Pays off what's owed", () => usd.format(state.payoff)) : "") : row("Down payment", (r) => `${usd.format(r.down)} <span style="color:var(--muted)">(${pct(r.s.downPct, 2)})</span>`)}
     ${any2 ? row("2nd loan / DPA toward it", (r) => r.amt2 ? "−" + usd.format(r.amt2) : "None") : ""}
     ${row("Points", (r) => usd.format(r.pointsCost))}
     ${row(hasClosing() ? "Lender fees (in APR)" : "Lender fees", (r) => usd.format(r.lenderFees))}
@@ -1045,6 +1055,7 @@ function render() {
     ${anyBd ? row("Buydown cost", (r) => r.bd ? usd.format(r.bdCost) : "None") : ""}
     ${anyCredit ? row("Seller credit", (r) => r.credit ? "−" + usd.format(r.credit) + (r.creditUnused > 0.5 ? `<div style="font-size:12px;color:var(--muted)">${usd.format(r.creditUnused)} unused</div>` : "") : "None") : ""}
     ${row("Estimated cash to close", (r) => usd.format(r.cashToClose), bCash, "strong")}
+    ${anyBack ? row("Cash back to you", (r) => r.cashBack > 0.5 ? usd.format(r.cashBack) : "None", -1, "strong") : ""}
     ${group("Over time")}
     ${row(`Total cost at ${state.horizon} yrs`, (r, i) => usd.format(r.cost[h]) + (i === bCost ? `<span class="pill">Lowest</span>` : ""), bCost, "strong")}
     ${row("Total cost at 30 yrs", (r) => usd.format(r.cost[MONTHS]))}
@@ -1248,6 +1259,7 @@ function shareView(f) { return { ...f, calcs: f.calcs.filter(isShared) }; }
 function setCompare(obj) {
   Object.assign(state, obj);
   state.taxPct = obj.taxPct; state.insPct = obj.insPct; // older saves: worked out from the saved amounts
+  state.payoff = obj.payoff ?? null; state.irrrl = !!obj.irrrl;
   state.closing = obj.closing ? JSON.parse(JSON.stringify(obj.closing)) : { template: "", items: [] };
   TOP_KEYS.forEach((k) => { $(k).value = state[k]; });
   escrowHints();
@@ -1388,6 +1400,7 @@ async function clientView() {
   if (error || !data || !data.length) { lock(true); show("vClientMissing"); return; }
   const c = data[0];
   const f0 = wrapFile(c.data);
+  $("cTitle").value = c.title || ""; // a refinance title switches the comparison to refinance wording
   if (tabParam && f0.calcs.some((t) => t.id === tabParam && isShared(t))) f0.active = tabParam;
   setState(f0);
   if (!file.calcs.length) { lock(true); show("vClientMissing"); return; }
@@ -1573,12 +1586,12 @@ function optionSpecs(text) {
 // Clean option names like "30 Yr Fixed - 1 Point" or "FHA 30 Yr Fixed - 3.5% Down", showing only what differs or was typed
 function nameOptions(opts) {
   const showType = new Set(opts.map((o) => o.s.type)).size > 1, showPts = opts.some((o) => o.typed.points), downs = new Set(opts.map((o) => o.s.downPct));
-  const showDown = opts.some((o) => o.typed.down) && (downs.size > 1 || !showPts);
+  const refi = isRefiFile(), showDown = refi ? downs.size > 1 : opts.some((o) => o.typed.down) && (downs.size > 1 || !showPts);
   const ptsTxt = (p) => `${+p} Point${+p === 1 ? "" : "s"}`;
   const names = opts.map((o) => {
     const s = o.s, det = [];
     if (showPts) det.push(ptsTxt(s.points));
-    if (showDown) det.push(`${+s.downPct}% Down`);
+    if (showDown) det.push(refi ? `${+(100 - s.downPct).toFixed(1)}% LTV` : `${+s.downPct}% Down`);
     const bd = s.bd || o.bd;
     return (showType ? { conv: "Conv", jumbo: "Jumbo", fha: "FHA", va: "VA" }[s.type] + " " : "") + (s.arm ? `${s.arm}/6 ARM` : `${s.term} Yr Fixed`) + (det.length ? " - " + det.join(", ") : "") + (bd ? `, ${{ 1: "1-0", 2: "2-1", 3: "3-2-1" }[bd]} Buydown` : "");
   });
@@ -1684,7 +1697,10 @@ function noteBasics(text) {
 function quickDraft(text, ai) {
   let { parts, low, price, st, name, addr, rent, income, extraYearN, extraMonth } = noteBasics(text);
   if (ai) { name = ai.name || null; addr = ai.addr || addr; }
-  const refi = /\brefi(nance)?\b/.test(low), condo = /\bcondo\b/.test(low);
+  const refi = /\brefi(nance)?\b/.test(low), condo = /\bcondo\b/.test(low), raw = (ai && ai.raw) || text;
+  // Numbers for the tabs: the AI reader's facts, else what the typed rules can read
+  const F = { ...noteFacts(raw) };
+  Object.entries((ai && ai.facts) || {}).forEach(([k, v]) => { if (v != null && v !== false && !(Array.isArray(v) && !v.length)) F[k] = v; });
   let preset = "starter";
   if (/\bpoints?\b|buy ?down/.test(low)) preset = "points";
   else if (/\b15\b/.test(low)) preset = "term";
@@ -1694,6 +1710,8 @@ function quickDraft(text, ai) {
   // Start a fresh comparison, then fill it in
   newComparison();
   state.creditReports = creditReportsFrom(text, ai ? ai.raw : "");
+  state.payoff = null; state.irrrl = !!(F.irrrl || /\birrrl\b|\bva\s+streamline\b/i.test(raw));
+  if (F.hoa_monthly) { state.hoa = Math.round(F.hoa_monthly); $("hoa").value = state.hoa; }
   draftInfo = { guessed: [], noPrice: !price, overLimit: 0 };
   if (name) $("cName").value = name;
   $("cTitle").value = (refi ? "Refinance options" : "Purchase options") + (addr ? ", " + addr : "");
@@ -1738,16 +1756,28 @@ function quickDraft(text, ai) {
     guessed = opts.some((o) => o.guessed);
     draftInfo.guessed = opts.map((o, i) => o.guessed ? i : -1).filter((i) => i >= 0);
     opts.forEach((o) => { o.s.est = !!o.guessed; });
-    state.scenarios = opts.map((o) => o.s); renderCards(); render();
+    state.scenarios = opts.map((o) => o.s);
+    // A refinance: the loan is what's owed (plus any second, debts paid off and cash out), whatever down payment was read
+    if (refi && state.price) {
+      const rn = refiNumbers(raw, F);
+      if (rn.owed) {
+        state.payoff = rn.owed + (rn.second || 0) + rn.debt;
+        setRefiLoan(Math.min(state.payoff + rn.cashOut, state.price * 0.97));
+        if (rn.second === null) draftInfo.refiAsk = { debt: rn.debt, owed: rn.owed, cashOut: rn.cashOut };
+      } else if (!opts.some((o) => o.typed.down)) { setRefiLoan(state.price * 0.8); draftInfo.refiAsk = { debt: rn.debt, second: rn.second, cashOut: rn.cashOut }; }
+      nameOptions(opts);
+    }
+    renderCards(); render();
     optText = opts.map((o) => o.s.name).join(" vs ");
   } else if (refi && state.price) {
     // A refinance with no loans typed: 30 and 15 year conventional for what they owe (plus debts being paid off), or 80% of the value
     // With no balance given, start at 80% of the value and ask for the balance and any second mortgage
-    const rp = refiParts((ai && ai.raw) || text);
-    const known = rp.owed && rp.owed < state.price;
-    const loan = known ? rp.owed + (rp.second || 0) + rp.debt : state.price * 0.8;
-    if (!known) draftInfo.refiAsk = { debt: rp.debt, second: rp.second };
-    else if (rp.second === null) draftInfo.refiAsk = { debt: rp.debt, owed: rp.owed };
+    const rp = refiNumbers(raw, F);
+    const known = !!rp.owed;
+    const loan = known ? rp.owed + (rp.second || 0) + rp.debt + rp.cashOut : state.price * 0.8;
+    if (known) state.payoff = rp.owed + (rp.second || 0) + rp.debt;
+    if (!known) draftInfo.refiAsk = { debt: rp.debt, second: rp.second, cashOut: rp.cashOut };
+    else if (rp.second === null) draftInfo.refiAsk = { debt: rp.debt, owed: rp.owed, cashOut: rp.cashOut };
     const a = { ...state.scenarios[0] };
     file.st = st || undefined; file.county = county || undefined;
     state.scenarios = [30, 15].map((term) => ({ ...a, type: "conv", term, arm: 0, points: 0, bd: 0, credit: 0, amt2: 0, fthb: false, rate: +(term === 15 ? (+a.rate || 6.75) - 0.5 : (+a.rate || 6.75)).toFixed(3), est: true }));
@@ -1766,13 +1796,24 @@ function quickDraft(text, ai) {
   if (st && fhfaRate(st, DEFAULT_SRC) !== null) { state.appreciation = fhfaRate(st, DEFAULT_SRC); $("appreciation").value = state.appreciation; render(); }
   file.st = st || undefined; file.rent = rent || undefined;
   if (st) stateEscrow(st);
-  const added = calcsFromNote(text, { refi, rent, income, extraYearN, extraMonth, specs });
+  const added = calcsFromNote(text, { refi, rent, income, extraYearN, extraMonth, specs, facts: F, raw });
   if (added.length) drawTabs();
   draftInfo.overLimit = overLimit.length;
   const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", "), state.creditReports > 1 && `credit report for ${state.creditReports} (the buyers aren't a couple, so each gets a report)`];
   const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
   autoTitle();
   say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
+}
+// Numbers for the calculator tabs that the typed rules can read; the AI reader's facts take their place when it's on
+function noteFacts(text) {
+  const n = (m) => m ? parseFloat(m[1].replace(/,/g, "")) * (/^k/i.test(m[2] || "") ? 1000 : 1) : null;
+  const F = {};
+  const hoa = n(text.match(/\bhoa\s*(?:dues|fees?)?\s*(?:is|of|:)?\s*\$?\s*(\d[\d,]*)(k)?/i) || text.match(/\$?\s*(\d[\d,]*)(k)?\s*(?:\/\s*mo\s*)?hoa\b/i)); if (hoa >= 10 && hoa < 5000) F.hoa_monthly = hoa;
+  const wm = text.match(/\bwait(?:ing)?\s+(?:for\s+)?(\d+|a|one|two|six)\s*(mo|months?|yrs?|years?)\b/i);
+  if (wm) { const k = { a: 1, one: 1, two: 2, six: 6 }[wm[1].toLowerCase()] || +wm[1]; F.wait_months = /^y/i.test(wm[2]) ? k * 12 : k; }
+  const bid = n(text.match(/\$?\s*(\d[\d,]*)\s*(k)?\s+(?:over|above)\s+(?:asking|ask|list)/i)); if (bid >= 1000) F.bid_over = bid;
+  const debts = n(text.match(/\b(?:debts?|debt payments?)\s*(?:are|is|of|:)?\s*\$?\s*(\d[\d,]*)(k)?\s*(?:\/\s*mo|a month|per month|monthly)/i)); if (debts >= 10 && debts < 20000) F.monthly_debts = debts;
+  return F;
 }
 // Refinance loan amount from a note: "owes 300k" / "balance of $300,000", plus "credit cards 40k" / "pay off $25k of debt" being consolidated
 function refiAmt(m) { return m ? parseFloat(m[1].replace(/,/g, "")) * (/^k/i.test(m[2] || "") ? 1000 : /^m/i.test(m[2] || "") ? 1e6 : 1) : 0; }
@@ -1788,9 +1829,16 @@ function refiSecond(text) {
 // Refinance amounts from a note: "owes 300k" / "balance of $300,000", any second mortgage, plus "credit cards 40k" being paid off
 function refiParts(text) {
   const owed = refiAmt(text.match(new RegExp(String.raw`\b(?:owes?|owed|owing|balance(?:\s+(?:is|of))?|payoff(?:\s+(?:is|of))?|current\s+(?:loan|mortgage)(?:\s+(?:is|of))?|first(?:\s+mortgage)?(?:\s+(?:is|of))?)\s*(?:about|around|~)?\s*` + AMT, "i")));
-  const debt = refiAmt(text.match(new RegExp(String.raw`\b(?:credit\s+cards?|cards|debts?|car\s+loan|student\s+loans?|cash[- ]?out)\s*(?:of|is|are|:|total(?:ing)?)?\s*(?:about|around|~)?\s*` + AMT, "i")))
+  const debt = refiAmt(text.match(new RegExp(String.raw`\b(?:credit\s+cards?|cards|cc|debts?|car\s+loan|student\s+loans?)\s*(?:of|is|are|:|total(?:ing)?)?\s*(?:about|around|~)?\s*` + AMT, "i")))
     || refiAmt(text.match(/\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?\s+(?:in|of)\s+(?:credit\s+card|card|consumer)?\s*debts?\b/i));
-  return { owed: owed >= 1000 ? owed : 0, second: refiSecond(text), debt: debt >= 100 ? debt : 0 };
+  const co = refiAmt(text.match(new RegExp(String.raw`\bcash[- ]?out\s*(?:of|is|:)?\s*(?:about|around|~)?\s*` + AMT, "i"))) || refiAmt(text.match(new RegExp(AMT + String.raw`\s*(?:cash[- ]?out|cash\s+back|(?:in\s+)?cash\b(?!\s+(?:purchase|buyer|offer)))`, "i")));
+  return { owed: owed >= 1000 ? owed : 0, second: refiSecond(text), debt: debt >= 100 ? debt : 0, cashOut: co >= 1000 ? co : 0 };
+}
+// What a refinance pays off and the new loan amount: balance + any second + debts paid off, plus cash out
+function refiNumbers(raw, F) {
+  const rp = refiParts(raw), list = (F.debts_paid_off || []).reduce((a, x) => a + (+x.balance || 0), 0);
+  const owed = F.current_balance || rp.owed, second = F.second_balance != null ? F.second_balance : rp.second;
+  return { owed: owed && owed < state.price ? owed : 0, second, debt: list || rp.debt, cashOut: F.cash_out || rp.cashOut || 0 };
 }
 // Set every refinance option to one loan amount (and its mortgage insurance, and jumbo over the county limit)
 function setRefiLoan(loan) {
@@ -1827,17 +1875,54 @@ function cashClosing() {
 }
 // Calculators a note asks for. On a follow-up (reuse), a tab of the same kind already in the file is updated instead of added again.
 function calcsFromNote(text, ctx, reuse) {
-  const { refi, rent, income, extraYearN, extraMonth, specs } = ctx;
-  const added = [];
+  const { refi, rent, income, extraYearN, extraMonth, specs } = ctx, F = ctx.facts || {};
+  const added = [], s0 = state.scenarios[0], a0 = s0 ? analyze(s0) : null;
+  const invest = /\binvest(ment|or)?\b|\brental\b|\binv\.?\s+prop|\bnoo\b|non[- ]owner/i.test(text + " " + (ctx.raw || ""));
   const addOrFill = (kind, extra, silent) => {
     const have = reuse && file.calcs.find((c) => c.kind === kind);
     if (have) { Object.assign(have.data, extra || {}); calcsFromNote.last = have; return have; }
     return (calcsFromNote.last = addCalc(kind, extra, silent));
   };
-  if (/\bwait(ing)?\b|cost of waiting/i.test(text)) { addOrFill("cow", refi ? { mode: "refi" } : null, true); added.push("cost of waiting"); }
-  if (rent) { addOrFill("rvb", { rent }, true); added.push("rent vs buy"); }
-  if (income || /\bafford/i.test(text)) { addOrFill("aff", income ? { income } : null, true); added.push("affordability"); }
-  if (/\bdebts?\b|consolidat/i.test(text)) { addOrFill("debt", null, true); added.push("debt consolidation"); }
+  if (/\bwait(ing)?\b|cost of waiting/i.test(text)) {
+    const ex = refi ? { mode: "refi" } : {};
+    if (F.wait_months) Object.assign(ex, refi ? { wait: F.wait_months } : { months: F.wait_months });
+    if (!refi && F.rate_if_wait) ex.rateLater = F.rate_if_wait;
+    if (refi) {
+      // Today's loan from the note; the new loan is option A
+      if (F.current_balance) ex.curBal = F.current_balance;
+      if (F.current_rate) ex.curRate = F.current_rate;
+      if (F.current_years_left) ex.curYears = F.current_years_left;
+      if (a0) Object.assign(ex, { newAmt: Math.round(a0.loan), rateNow: s0.rate, newTerm: s0.term });
+      if (F.hoped_rate) ex.rateHope = F.hoped_rate; else if (s0) ex.rateHope = +(s0.rate - 0.5).toFixed(3);
+    }
+    addOrFill("cow", ex, true); added.push("cost of waiting");
+  }
+  if (rent && !invest) { addOrFill("rvb", { rent }, true); added.push("rent vs buy"); }
+  if (income || /\bafford/i.test(text)) {
+    // Affordability uses option A's program and rate, and the cash and debts in the note
+    const ex = income ? { income } : {};
+    if (s0) Object.assign(ex, { program: s0.type === "fha" ? "fha" : s0.type === "va" ? "va" : "conv", rate: s0.rate, term: s0.term });
+    if (F.monthly_debts) ex.debts = F.monthly_debts;
+    if (F.cash_for_down != null) ex.down = F.cash_for_down; else if (s0 && s0.type === "va" && s0.downPct === 0) ex.down = 0;
+    addOrFill("aff", ex, true); added.push("affordability");
+  }
+  if (/\bdebts?\b|consolidat/i.test(text)) {
+    // The mortgage and debts from the note; a payment that wasn't typed is estimated (cards 3% of the balance, loans over 5 years)
+    const ex = { value: state.price || 500000 };
+    const owed = F.current_balance || refiParts(ctx.raw || text).owed;
+    if (owed) ex.mBal = owed;
+    if (F.current_rate) ex.mRate = F.current_rate;
+    if (F.current_years_left) ex.mYears = F.current_years_left;
+    if (s0) Object.assign(ex, { rate: s0.rate, term: s0.term });
+    const list = (F.debts_paid_off || []).map((x) => {
+      const card = /card|revolv|cc\b/i.test(x.name || ""), rate = x.rate || (card ? 22 : 8.5);
+      return { name: x.name || "Debt", kind: card ? "revolving" : "installment", bal: x.balance, rate, pay: x.payment || Math.round(card ? x.balance * 0.03 : pmt(x.balance, rate, 5)), payoff: true, est: !x.payment };
+    });
+    if (!list.length && refi) { const rp = refiParts(ctx.raw || text); if (rp.debt) list.push({ name: "Debts paid off", kind: "revolving", bal: rp.debt, rate: 22, pay: Math.round(rp.debt * 0.03), payoff: true, est: true }); }
+    if (list.length || refi) ex.debts = list.length ? list : [{ name: "Debt to pay off", kind: "revolving", bal: 0, rate: 0, pay: 0, payoff: true }];
+    if (F.second_balance && ex.debts) ex.debts.push({ name: "Second mortgage / HELOC", kind: "installment", bal: F.second_balance, rate: 8.5, pay: Math.round(pmt(F.second_balance, 8.5, 15)), payoff: true, est: true });
+    addOrFill("debt", ex, true); added.push("debt consolidation" + (ex.debts && ex.debts.some((x) => x.est) ? " (debt payments not typed are estimated, so fix them on the tab)" : ""));
+  }
   if (/\bextra\b|pay ?off (early|faster|sooner)/i.test(text)) {
     // Use the first option's loan; "2 extra payments a year" means two extra principal and interest payments each year
     const a = analyze(state.scenarios[0]), s0 = state.scenarios[0], ex = { loan: Math.round(a.loan), rate: s0.rate, term: s0.term };
@@ -1849,18 +1934,40 @@ function calcsFromNote(text, ctx, reuse) {
   if (/\barm\b|adjustable/i.test(text)) {
     // Fill the ARM tab from the typed options: the first ARM against the first fixed loan
     const a = state.scenarios.find((x) => x.arm), f = state.scenarios.find((x) => !x.arm), ex = {};
-    if (a) Object.assign(ex, { loan: Math.round(analyze(a).loan), armRate: a.rate, fixedYrs: a.arm, term: a.term });
+    // Caps: 2/1/5 on a 5/6 ARM, 5/1/5 on a 7/6 or 10/6 (SOFR ARM standards)
+    if (a) Object.assign(ex, { loan: Math.round(analyze(a).loan), armRate: a.rate, fixedYrs: a.arm, term: a.term, capFirst: a.arm <= 5 ? 2 : 5, capEach: 1, capLife: 5 });
     if (f) Object.assign(ex, { fixedRate: f.rate, flatRate: f.rate });
     addOrFill("arm", ex, true); added.push("ARM vs fixed");
   }
-  if (/over ?ask|\bbid\b/i.test(text)) { addOrFill("equity", { mode: "bid" }, true); added.push("bid over asking"); }
+  if (/over ?ask|\bbid\b/i.test(text)) {
+    // The price is what they'd pay; asking is that less the amount over
+    const over = F.bid_over || 15000, ex = { mode: "bid", over };
+    if (state.price) Object.assign(ex, { asking: state.price - (F.bid_over ? over : 0), value: state.price - (F.bid_over ? over : 0) });
+    if (s0) Object.assign(ex, { downPct: s0.downPct, rate: s0.rate, term: s0.term });
+    addOrFill("equity", ex, true); added.push("bid over asking");
+  }
   else if (/\bequity\b|apprec/i.test(text)) { addOrFill("equity", null, true); added.push("equity & appreciation"); }
-  if (/\binvest(ment|or)?\b|\brental\b/i.test(text)) { addOrFill("invest", null, true); added.push("investment property"); }
+  if (invest) {
+    // Price, down payment and rate as typed (option A); rent from the note
+    const ex = {};
+    if (state.price) ex.price = state.price;
+    if (s0 && !s0.est) Object.assign(ex, { rate: s0.rate, term: s0.term });
+    if (s0 && /\bdown\b|\bdn\b|%/i.test(ctx.raw || text)) ex.downPct = s0.downPct;
+    if (rent) ex.rent = rent;
+    if (state.insurance) ex.insurance = state.insurance;
+    addOrFill("invest", ex, true); added.push("investment property");
+  }
   if (CASH_RE.test(text)) {
     // Compare paying cash with the first financed option
     // Compare with the one financed option typed ("paying cash vs 20% down at 6.5%"), else the first option
     const s0 = specs && specs.length === 1 ? { ...state.scenarios[0], ...parseOption(specs[0], { ...state.scenarios[0] }).s } : state.scenarios[0], a = analyze(s0);
-    addOrFill("cash", { price: state.price, downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other), cashClose: cashClosing() }, true); added.push("cost of paying cash");
+    const ex = { price: state.price, downPct: s0.downPct, rate: s0.rate, term: s0.term, closing: Math.round(a.pointsCost + a.lenderFees + a.cc.other), cashClose: cashClosing() };
+    // Where the cash would come from, when the note says
+    if (F.savings) ex.liquid = F.savings;
+    if (F.investments) ex.inv = F.investments;
+    if (F.retirement) ex.ret = F.retirement;
+    if (F.under_59 === true) ex.under59 = 1; else if (F.under_59 === false) ex.under59 = 0;
+    addOrFill("cash", ex, true); added.push("cost of paying cash");
   }
   return added;
 }
@@ -1988,7 +2095,8 @@ function asAskBalance(r) {
   const debtTxt = r.debt ? ` plus ${usd.format(r.debt)} of debts paid off` : "";
   const setLoan = (owed, second) => {
     if (!toCompare()) return asNext();
-    const loan = Math.min(owed + second + (r.debt || 0), state.price * 0.97);
+    state.payoff = owed + second + (r.debt || 0);
+    const loan = Math.min(state.payoff + (r.cashOut || 0), state.price * 0.97);
     setRefiLoan(loan); renderCards(); render(); syncActive();
     asSay(`Loan amount set to ${usd.format(Math.round(loan))}: balance ${usd.format(owed)}${second ? ` + second ${usd.format(second)}` : ""}${r.debt ? ` + ${usd.format(r.debt)} debts` : ""}.`);
     asNext();
@@ -2033,7 +2141,8 @@ function asSuggest() {
   const addTab = (txt) => { const added = calcsFromNote(txt, ctx, true); drawTabs(); asSay(`Added ${added.join(", ")} as a tab below. Save when it looks right.`); asNext(); };
   if (sc.length >= 3 && !has("amort")) offer("amort", "Want to show how extra payments could pay one of these off faster?", () => addTab("extra"));
   if (sc.some((x) => x.arm) && !has("arm")) offer("arm", "One option is an ARM. Want an ARM vs fixed tab showing how the payment could change later?", () => addTab("ARM"));
-  if (sc.some((x) => x.type === "fha" || x.downPct <= 5) && !has("rvb") && out.length < 2 && !asDeclined.has("rvb")) { out.push({ key: "rvb", q: "With a small down payment, a rent vs buy comparison often helps. What's their rent now? Or say no.", rent: true }); asDeclined.add("rvb"); }
+  const refiOrRental = /refi/i.test($("cTitle").value) || has("invest");
+  if (!refiOrRental && sc.some((x) => x.type === "fha" || x.downPct <= 5) && !has("rvb") && out.length < 2 && !asDeclined.has("rvb")) { out.push({ key: "rvb", q: "With a small down payment, a rent vs buy comparison often helps. What's their rent now? Or say no.", rent: true }); asDeclined.add("rvb"); }
   if (!out.length && !has("cow") && !/refi/i.test($("cTitle").value)) offer("cow", "Want a cost of waiting tab, showing what it could cost to wait a year to buy?", () => addTab("wait"));
   if (!out.length) { asNext(); return; }
   out.forEach((o) => asQueue.push(() => {
@@ -2197,7 +2306,7 @@ function applyAi(job, d) {
     d.extra_payments_per_year ? `${n(d.extra_payments_per_year)} extra payments a year` : d.extra_monthly ? `extra $${n(d.extra_monthly)} a month` : d.extra_payments ? "extra payments" : "",
     d.arm_vs_fixed || anyArm ? "ARM" : "", d.bid_over_asking ? "over asking" : "", d.equity ? "equity" : "", d.investment ? "investment" : "", d.paying_cash ? "paying cash" : "",
     d.seller_credit_all ? "seller credit $" + n(d.seller_credit_all) : "", d.credit_reports > 1 ? `credit reports ${Math.round(d.credit_reports)}` : "", d.dpa_amount ? `DPA $${n(d.dpa_amount)}${d.dpa_rate ? ` at ${d.dpa_rate}%` : ""}` : ""];
-  quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4), raw: job.note });
+  quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4), raw: job.note, facts: d.facts || {} });
   const notes = (d.assumptions || []).filter(Boolean);
   if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
 }
@@ -2361,7 +2470,7 @@ function autoTitle(force) {
   el.value = (refi ? "Refinance Options" : "Purchase Options") + ": " + words.join(", ") + (addr ? " · " + addr : "");
 }
 $("cTitle").addEventListener("input", () => { titleHand = true; });
-function newComparison() { titleHand = false; stopPresenting(); current = null; setState(JSON.parse(JSON.stringify(BLANK))); applyDefaultTemplate(); fillClient(null); drawList(); }
+function newComparison() { titleHand = false; stopPresenting(); current = null; fillClient(null); setState(JSON.parse(JSON.stringify(BLANK))); applyDefaultTemplate(); drawList(); } // title cleared first, so the blank form isn't drawn as the last client's refinance
 async function openComparison(id) {
   const { data, error } = await sb.from("comparisons").select("*").eq("id", id).single();
   if (error) { say("saveStatus", "Couldn't open it: " + error.message, true); return; }
