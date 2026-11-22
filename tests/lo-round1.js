@@ -24,8 +24,8 @@
     C("1.1M 10 dn 30y 7.0 vs 15y 6.5", { price: 1100000, askCounty: true }),
     C("refi val 600k co 30 and 15", { price: 600000, refi: true, askBalance: true }),
     // ---- Cost of waiting ----
-    C("cost of waiting 475k co 5 dn 6.75, wait 12 mo for 6.25", { price: 475000, calcs: ["cow"], data: { cow: { price: 475000, downPct: 5, rate: 6.75, months: 12 } } }),
-    C("refi cost of waiting val 600k owe 380k at 7.625, today 6.5 30y, hoping for 6", { refi: true, calcs: ["cow"], data: { cow: { mode: "refi", curBal: 380000, curRate: 7.625, rateNow: 6.5, rateHope: 6 } } }),
+    C("cost of waiting 475k co 5 dn 6.75, wait 12 mo for 6.25", { price: 475000, calcs: ["cow"], data: { cow: { price: 475000, downPct: 5, rate: 6.75, rateLater: 6.25, months: 12 } } }),
+    C("refi cost of waiting val 600k owe 380k at 7.625, today 6.5 30y, hoping for 6", { refi: true, calcs: ["cow"], data: { cow: { mode: "refi", curBal: 380000, curRate: 7.625, newAmt: 380000, rateNow: 6.5, rateHope: 6 } } }),
     C("buyers want to wait 6 months, 420k fha 3.5 6.25 co", { price: 420000, calcs: ["cow"], data: { cow: { months: 6, downPct: 3.5, rate: 6.25 } } }),
     // ---- Rent vs buy ----
     C("rent vs buy, renting 2,350/mo, 450k co 5 dn 6.625", { price: 450000, calcs: ["rvb"], data: { rvb: { rent: 2350, price: 450000, downPct: 5, rate: 6.625 } } }),
@@ -192,7 +192,7 @@
       Object.entries(want).forEach(([fk, fv]) => {
         let gv = got[fk];
         if (fk === "debtTotal") gv = (got.debts || []).filter((x) => x.payoff).reduce((s, x) => s + (+x.bal || 0), 0);
-        if (typeof fv === "number" ? !near(+gv, fv, 1) : gv !== fv) f.push(`${k}.${fk}: got ${JSON.stringify(gv)}, want ${fv}`);
+        if (typeof fv === "number" ? !near(+gv, fv, Math.abs(fv) < 100 ? 0.001 : 1) : gv !== fv) f.push(`${k}.${fk}: got ${JSON.stringify(gv)}, want ${fv}`);
       });
     });
     if (e.yearlyPI) { const g = dataOf("amort"), s0 = d.scenarios[0]; if (g) { const want = e.yearlyPI * pmtX(analyze(s0).loan, s0.rate, s0.term); if (!near(+g.yearly, want, 1)) f.push(`amort.yearly ${g.yearly} vs ${Math.round(want)}`); } }
