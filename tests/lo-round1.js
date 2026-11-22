@@ -69,22 +69,24 @@
   const FHA_ANNUAL = (base, value, term) => { const ltv = base / value, big = base > 726200; return term > 15 ? (big ? (ltv > 0.95 ? 0.75 : 0.7) : (ltv > 0.95 ? 0.55 : 0.5)) : (big ? (ltv > 0.9 ? 0.65 : ltv > 0.78 ? 0.4 : 0.15) : (ltv > 0.9 ? 0.4 : 0.15)); };
   const CO_LIMIT = { adams: 862500, arapahoe: 862500, boulder: 879750, broomfield: 862500, denver: 862500, douglas: 862500, eagle: 1249125, jefferson: 862500, pitkin: 1209750, summit: 1092500, elbert: 862500 };
   // Borrower's share of each fee in the template, figured from the template's own rules
-  function feesFor(items, price, loan, taxes, ins, refi, reports) {
-    let apr = 0, other = 0, prepaid = 0;
+  function feesFor(items, price, loan, taxes, ins, refi, reports, rate) {
+    let apr = 0, other = 0, prepaid = 0, ppi = 0;
     for (const it of items) {
       const stamp = /deed|transfer|stamp|documentary/i.test(it.name);
       let a = (+it.amt || 0) + (stamp ? price : loan) * (+it.pct || 0) / 100;
       if (it.auto !== false) {
         if (stamp) a = refi ? 0 : price * 0.0001;
+        else if (it.prepaid && /prepaid interest/i.test(it.name)) a = loan * rate / 100 / 365 * 15;   // 15 days, like Mortgage Coach
         else if (/credit report/i.test(it.name)) a = (+it.amt || 0) * reports;
         else if (it.prepaid && /premium/i.test(it.name)) a = ins;
         else if (it.prepaid && /hazard.*reserve|insurance reserve/i.test(it.name)) a = ins / 12 * (refi ? 6 : 3);
         else if (it.prepaid && /tax.*reserve/i.test(it.name)) a = taxes / 12 * (refi ? 6 : 3);
       }
       const b = it.by === "S" || it.by === "L" ? 0 : it.by === "X" ? (it.splitBy === "$" ? Math.min(a, +it.split || 0) : a * (+it.split || 0) / 100) : a;
+      if (it.prepaid && /prepaid interest/i.test(it.name)) ppi += b;
       if (it.prepaid) prepaid += b; else if (it.apr) apr += b; else other += b;
     }
-    return { apr, other, prepaid };
+    return { apr, other, prepaid, ppi };
   }
   function aprOf(amtFin, pays) {
     let lo = 0, hi = 0.05;
@@ -142,7 +144,8 @@
       if (s.type === "conv") { const fthb = s.fthb ?? s.downPct < 5, want = PMI(s.downPct, s.term, fthb) * base / 1200; if (!near(a.mi, want, 0.6)) f.push(`${L} PMI ${a.mi.toFixed(2)} vs ${want.toFixed(2)} (${PMI(s.downPct, s.term, fthb)}%)`); }
       if (s.type === "fha") { const want = FHA_ANNUAL(base, price, s.term) * base / 1200; if (!(a.mi > want * 0.97 && a.mi < want * 1.02)) f.push(`${L} FHA MIP ${a.mi.toFixed(2)} vs about ${want.toFixed(2)}`); }
       // fees and cash to close
-      const fees = feesFor(items, price, loan, d.taxes, d.insurance, refi, reports);
+      const fees = feesFor(items, price, loan, d.taxes, d.insurance, refi, reports, s.rate);
+      if (!items.some((it) => /prepaid interest/i.test(it.name))) f.push("no prepaid interest line in the fees");
       if (!near(a.cc.apr + a.cc.other + a.cc.prepaid, fees.apr + fees.other + fees.prepaid, 1.5)) f.push(`${L} closing costs ${Math.round(a.cc.apr + a.cc.other + a.cc.prepaid)} vs template ${Math.round(fees.apr + fees.other + fees.prepaid)}`);
       const pts = loan * (s.points || 0) / 100;
       const bd = Math.min(3, Math.max(0, +s.bd || 0)); let bdCost = 0; for (let y = 0; y < bd; y++) bdCost += (pi - pmtX(loan, Math.max(0, s.rate - (bd - y)), s.term)) * 12;
@@ -156,7 +159,7 @@
       // (checked exactly only where there's no monthly MI, so every payment is the same P&I)
       if (a.apr + 0.0005 < s.rate) f.push(`${L} APR ${a.apr.toFixed(3)} below the rate ${s.rate}`);
       if (!(s.type === "conv" && s.downPct < 20) && s.type !== "fha") {
-        const aprWant = aprOf(loan - fin - pts - (+s.fees || 0) - fees.apr, new Array(s.term * 12).fill(pi));
+        const aprWant = aprOf(loan - fin - pts - (+s.fees || 0) - fees.apr - fees.ppi, new Array(s.term * 12).fill(pi));
         if (!near(a.apr, aprWant, 0.01)) f.push(`${L} APR ${a.apr.toFixed(3)} vs ${aprWant.toFixed(3)}`);
       }
       if (/\bat \d/.test(s.name)) f.push(`${L} name has a rate: ${s.name}`);

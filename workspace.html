@@ -718,7 +718,7 @@ function analyze(s) {
   const n = s.term * 12, r = s.rate / 1200;
   const pi = loan === 0 ? 0 : r ? loan * r / (1 - Math.pow(1 + r, -n)) : loan / n;
   const pointsCost = loan * s.points / 100;
-  const cc = closingTotals(loan);
+  const cc = closingTotals(loan, s.rate);
   // Temporary buydown (1-0, 2-1, 3-2-1): the payment is figured 1 to 3 points under the note rate in the first years.
   // The difference is paid up front (often by the seller) into an account that makes up each month's shortfall.
   const bd = Math.min(Math.max(0, Math.round(+s.bd || 0)), 3), bdPay = [];
@@ -758,7 +758,7 @@ function analyze(s) {
     equity.push(value * Math.pow(1 + state.appreciation / 100, m / 12) - b - b2);
   }
   // APR: monthly rate i where PV(payments) = amount financed
-  const amtFin = loan - financed - pointsCost - s.fees - cc.apr;
+  const amtFin = loan - financed - pointsCost - s.fees - cc.apr - cc.ppi;
   let apr = s.rate;
   if (amtFin > 0 && pay.length) {
     const pv = (i) => pay.reduce((acc, x, k) => acc + x / Math.pow(1 + i, k + 1), 0);
@@ -794,7 +794,9 @@ function feeShares(it, a) {
   return { b: a, s: 0, l: 0 };
 }
 // Template rules that follow the state: NH's transfer tax is split between buyer and seller
+const PREPAID_DAYS = 15;
 function normFeeItems(items, st) {
+  if (!items.some((it) => /prepaid interest/i.test(it.name))) items.push({ name: "Prepaid Interest", amt: 0, pct: 0, by: "B", apr: false, prepaid: true });
   const r = STAMP_RULE[(st || "").toUpperCase()];
   for (const it of items) if (r && r.split && /deed|transfer|stamp|documentary/i.test(it.name) && it.auto !== false && it.by !== "X") { it.by = "X"; it.split = r.split; it.splitBy = "%"; }
   return items;
@@ -806,12 +808,13 @@ function feeState() {
 }
 function isRefiFile() { return /^refinance/i.test($("cTitle").value) || /refi/i.test((state.closing && state.closing.template) || ""); }
 function reserveMonths() { return isRefiFile() ? 6 : 3; }
-function feeAmount(it, loan) {
+function feeAmount(it, loan, rate) {
   const isStamp = /deed|transfer|stamp|documentary/i.test(it.name);
   const base = isStamp ? state.price : loan;
   let a = (+it.amt || 0) + base * (+it.pct || 0) / 100, est = false, note = "";
   if (it.auto !== false) {
     if (isStamp && STAMP_RULE[feeState()]) { const r = STAMP_RULE[feeState()]; a = isRefiFile() ? 0 : Math.max(r.min, state.price * r.pct / 100); note = r.note; }
+    else if (it.prepaid && /prepaid interest/i.test(it.name)) { a = loan * (rate ?? (state.scenarios[0] ? +state.scenarios[0].rate : 0)) / 100 / 365 * PREPAID_DAYS; est = true; note = `${PREPAID_DAYS} days`; }
     else if (/credit report/i.test(it.name) && (state.creditReports || 1) > 1) { a = (+it.amt || 0) * state.creditReports; note = `${state.creditReports} separate reports`; }
     else if (it.prepaid && /hazard.*premium|insurance premium/i.test(it.name)) { a = state.insurance; est = true; note = "1 yr"; }
     else if (it.prepaid && /hazard.*reserve|insurance reserve/i.test(it.name)) { a = state.insurance / 12 * reserveMonths(); est = true; note = reserveMonths() + " mo"; }
@@ -819,12 +822,13 @@ function feeAmount(it, loan) {
   }
   return { a, est, note };
 }
-function closingTotals(loan) {
-  const t = { apr: 0, other: 0, prepaid: 0, seller: 0, lender: 0 };
+function closingTotals(loan, rate) {
+  const t = { apr: 0, other: 0, prepaid: 0, seller: 0, lender: 0, ppi: 0 };
   for (const it of (state.closing && state.closing.items) || []) {
-    const { a } = feeAmount(it, loan);
+    const { a } = feeAmount(it, loan, rate);
     const sh = feeShares(it, a);
     t.seller += sh.s; t.lender += sh.l;
+    if (it.prepaid && /prepaid interest/i.test(it.name)) t.ppi += sh.b; // a finance charge, so it counts in the APR
     if (it.prepaid) t.prepaid += sh.b; else if (it.apr) t.apr += sh.b; else t.other += sh.b;
   }
   return t;
@@ -1130,20 +1134,20 @@ function renderClosing(a) {
       </tr>`).join("") + `</tbody>`;
   }
   items.forEach((it, i) => {
-    const { a: amt, est, note } = feeAmount(it, loan);
+    const { a: amt, est, note } = feeAmount(it, loan, a ? a.s.rate : undefined);
     const tr = $("feeTable").querySelector(`tr[data-f="${i}"]`); if (!tr) return;
     const inp = tr.querySelector("[data-k=over]"), out = tr.querySelector("[data-amt]");
     if (inp && document.activeElement !== inp) inp.value = Math.round(amt);
     if (out) out.textContent = usd.format(amt);
     const base = /deed|transfer|stamp|documentary/i.test(it.name) ? "price" : "loan";
     const why = it.custom ? "Added for this loan" : it.over ? `Changed for this loan${ro ? "" : ` · <button class="btn link" type="button" data-reset="${i}">Reset</button>`}`
-      : [note === "1 yr" ? "1 year of insurance" : /mo$/.test(note) ? `${note.replace(" mo", "")} months of ${/tax/i.test(it.name) ? "taxes" : "insurance"}` : note ? note : +it.pct ? `${+it.amt ? usd.format(+it.amt) + " + " : ""}${+it.pct}% of the ${base}` : "",
+      : [/days$/.test(note) ? `${note} of interest at the rate` : note === "1 yr" ? "1 year of insurance" : /mo$/.test(note) ? `${note.replace(" mo", "")} months of ${/tax/i.test(it.name) ? "taxes" : "insurance"}` : note ? note : +it.pct ? `${+it.amt ? usd.format(+it.amt) + " + " : ""}${+it.pct}% of the ${base}` : "",
          est ? "estimate" : "", it.apr ? "in APR" : "", it.prepaid ? "prepaid" : ""].filter(Boolean).join(" · ");
     const sh = feeShares(it, amt);
     const who = it.by === "X" ? `Borrower ${usd.format(sh.b)} · seller ${usd.format(sh.s)}` : it.by === "S" ? "seller pays" : it.by === "L" ? "lender pays" : "";
     tr.querySelector("[data-why]").innerHTML = [who, why].filter(Boolean).join(" · ");
   });
-  const t = closingTotals(loan);
+  const t = closingTotals(loan, a ? a.s.rate : undefined);
   $("feeSum").innerHTML = `<span>Lender fees (in APR) <b>${usd.format(t.apr)}</b></span><span>Third-party fees <b>${usd.format(t.other)}</b></span><span>Prepaids &amp; escrow <b>${usd.format(t.prepaid)}</b></span>` +
     (t.seller ? `<span>Paid by seller <b>${usd.format(t.seller)}</b></span>` : "") + (t.lender ? `<span>Paid by lender <b>${usd.format(t.lender)}</b></span>` : "") +
     (state.closing.template ? `<span style="color:var(--muted)">From template: ${escAttr(state.closing.template)}</span>` : "");
