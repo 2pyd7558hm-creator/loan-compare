@@ -99,7 +99,7 @@ function scrub(t) {
   if (name) s = s.replace(new RegExp("\\b" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi"), "{name}");
   return s;
 }
-const show = (t) => String(t).replace(/\{name\}/g, name || "there").replace(/\bthere there\b/g, "there");
+const show = (t) => name ? String(t).replace(/\{name\}/g, name) : String(t).replace(/,?\s*\{name\}(?=[\s!.,?])/g, "").replace(/\{name\},?\s*/g, "");
 function draw() {
   const el = $("log");
   el.innerHTML = [{ who: "a", text: HELLO }, ...log].map((m) => `<div class="msg ${m.who}">${escH(m.who === "u" ? m.text : show(m.text))}</div>`).join("");
