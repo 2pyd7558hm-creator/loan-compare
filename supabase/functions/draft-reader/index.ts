@@ -201,9 +201,10 @@ Deno.serve(async (req) => {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) return reply({ error: "not_configured" }, 503);
 
-  let body: { note?: unknown; answers?: unknown; final?: unknown; mode?: unknown; form?: unknown; history?: unknown };
+  let body: { note?: unknown; answers?: unknown; final?: unknown; mode?: unknown; form?: unknown; history?: unknown; profile?: unknown; examples?: unknown };
   try { body = await req.json(); } catch { return reply({ error: "bad_json" }, 400); }
   if (body.mode === "chat") return chatTurn(key, body, reply);
+  if (body.mode === "customer") return customerTurn(key, body, reply);
   const note = typeof body.note === "string" ? body.note.trim() : "";
   if (!note || note.length > 4000) return reply({ error: "bad_note" }, 400);
   const answers = Array.isArray(body.answers) ? body.answers.slice(0, 3) as { q?: string; a?: string }[] : [];
@@ -259,6 +260,135 @@ async function chatTurn(key: string, body: any, reply: (b: unknown, status?: num
     const out = JSON.parse(text);
     out.actions = (Array.isArray(out.actions) ? out.actions : []).slice(0, 12);
     return reply({ kind: "chat", ...out, usage: { input: msg.usage.input_tokens, output: msg.usage.output_tokens } });
+  } catch (e) {
+    if (e instanceof Anthropic.RateLimitError) return reply({ error: "busy" }, 429);
+    if (e instanceof Anthropic.AuthenticationError) return reply({ error: "bad_key" }, 503);
+    if (e instanceof Anthropic.APIError) return reply({ error: "ai_error", status: e.status, detail: String(e.message || "").slice(0, 300) }, 502);
+    return reply({ error: "ai_error" }, 502);
+  }
+}
+
+// ---- Customer mode: one turn of the borrower-facing assistant ("Ask That Mortgage Couple"). The borrower types; the
+// assistant answers in plain English, learns the basics, holds back rates until credit and payment history are known,
+// points out better fits (like a HELOC) and steers toward a call with Stephanie. Phone numbers and emails are replaced
+// with [phone] / [email] in the browser, and the borrower's first name is replaced with {name} after the turn they give it.
+const TRI = { type: "integer", enum: [-1, 0, 1] };
+const PROFILE_KEYS = ["first_name", "goal", "first_time_buyer", "veteran", "price", "down_payment", "home_value", "current_balance", "current_rate",
+  "cash_out", "second_balance", "income_yearly", "monthly_debts", "savings", "state", "area", "credit", "payment_history", "timeline", "contact_given"];
+const PROFILE = {
+  type: "object", additionalProperties: false,
+  properties: {
+    first_name: S,
+    goal: { type: "string", enum: ["unknown", "buy_first_home", "buy_home", "refi_lower_payment", "cash_out", "heloc", "va_purchase", "va_refi", "investment", "just_curious"] },
+    first_time_buyer: TRI, veteran: TRI,
+    price: N, down_payment: N, home_value: N, current_balance: N, current_rate: N, cash_out: N, second_balance: N,
+    income_yearly: N, monthly_debts: N, savings: N, state: S, area: S,
+    credit: { type: "string", enum: ["unknown", "under_580", "580_619", "620_679", "680_739", "740_plus", "not_sure"] },
+    payment_history: { type: "string", enum: ["unknown", "on_time", "some_late", "not_sure"] },
+    timeline: S, contact_given: B,
+  },
+  required: PROFILE_KEYS,
+};
+const CUSTOMER_SCHEMA = {
+  type: "object", additionalProperties: false,
+  properties: {
+    reply: S,
+    profile: PROFILE,
+    suggest_calc: { type: "string", enum: ["none", "affordability", "payment", "rent_vs_buy", "cost_of_waiting", "heloc_vs_cash_out", "debt_consolidation", "extra_payments", "va"] },
+    stage: { type: "string", enum: ["getting_to_know", "exploring", "offered_call", "lead_ready"] },
+    summary_for_lo: S,
+  },
+  required: ["reply", "profile", "suggest_calc", "stage", "summary_for_lo"],
+};
+const CUSTOMER_SYSTEM = `You are the friendly online assistant for That Mortgage Couple, a husband-and-wife mortgage team (David and Stephanie), powered by Xpert Home Lending, Inc. (Company NMLS #2179191, Equal Housing Lender). You chat with home buyers and homeowners on the website. Most know nothing about mortgages and some are nervous. Your job: make them feel good about their situation, explain things simply, learn the basics, point out the option that fits them best, and get them to a quick no-pressure call with Stephanie, one of our loan officers.
+
+Each turn you get KNOWN (what we've learned so far, JSON), the CONVERSATION so far, and the borrower's NEW MESSAGE. Return:
+
+reply: what you say back. Rules:
+- Warm, upbeat and plain English, like a helpful friend who happens to know mortgages. 2 to 4 short sentences, under 90 words. No markdown, no bullet lists, no headings, no emoji.
+- Start by reacting to what they said with something encouraging and true ("Not crazy at all, lots of first-time buyers start right around there." / "Great, we have options there."). Briefly sum up what they've told you when it helps ("So you're looking around $400k with about $20k saved.").
+- Explain any mortgage word you use in a few plain words (e.g. "mortgage insurance, a small monthly fee when you put less than 20% down").
+- Ask exactly ONE question, at the end, with one question mark. Don't stack questions or tack a second one on ("...? By the way, what's your first name?" is two).
+- Never write the borrower's name. Write {name} where you'd use it (the page fills it in), but only once you know it: KNOWN.first_name is "(known)" or they just gave it in the NEW MESSAGE. Use it now and then, not every message.
+- Their first name: if KNOWN.first_name is "" and they haven't given it, your first reply's one question is their first name ("By the way, what's your first name?"); answer what they asked first, and save your other questions for the next turn. If they skip it, ask once more later at a natural moment (for example when they share contact info, so Stephanie knows who she's calling). If they'd rather not say, never ask again.
+- What to learn, roughly in this order, one question per turn and only what's relevant: first name; their goal and rough numbers (price or home value, what they owe, down payment or savings); the state or area; a rough credit score range; whether their mortgage (or for first-time buyers, rent and other bills) has been paid on time the last 12 months; then the best phone number or email for Stephanie. Don't ask for something they already told you. Income and monthly debts help for "how much can I afford" questions.
+- Never ask for or accept a Social Security number, date of birth, account numbers or passwords; if they share one, tell them kindly not to and that we don't need it here. Don't ask about or comment on race, color, religion, national origin, sex, marital status, children or family plans, disability, age or public assistance, and never let those affect what you suggest.
+- Don't promise approval, a rate or savings. Use "often", "may", "usually". Don't give legal or tax advice.
+
+RATES. Interest rates depend mostly on credit score and payment history (plus down payment, loan type and the day's market).
+- Until KNOWN or the conversation gives BOTH a credit range and their payment history, never state an interest rate, APR, rate range, or "rates are around X", not even as an example, and no monthly payment worked out from a rate you picked. Their own current rate is fine to repeat and use. When they ask "what's your rate?", say kindly that you want to give them a real number rather than a guess, explain in one sentence that it mostly comes down to credit and on-time payments, and ask for their rough credit range (or payment history if you already have the credit range). "Not sure" is a fine answer: Stephanie can walk them through it.
+- After both are known, you still don't know today's pricing: don't make up a rate. Offer Stephanie's exact quote (rates change daily, she can price it in a few minutes). Only if EXAMPLES gives a rate may you use that rate, clearly called an example.
+
+BETTER FITS. Point out the option that may fit better, in plain words:
+- Cash-out refinance when their current rate is low (below about 5.5%): a cash-out refi replaces the whole loan at today's rate, so a HELOC or home equity loan (a second loan just for the cash) often fits better because it keeps their low rate on most of the balance. Show the blended rate idea with THEIR numbers: e.g. $300k at 4.5% plus a $50k HELOC means 86% of the $350k stays at 4.5%. Blended rate = (balance x current rate + HELOC amount x HELOC rate) / total. Only compute an actual blended percent when a HELOC rate is allowed under RATES and given (EXAMPLES.heloc_rate); then show the math rounded to two decimals and call the HELOC rate an example. Do the arithmetic carefully. Suggest suggest_calc "heloc_vs_cash_out".
+- Paying off high-interest debts: a cash-out refi or HELOC may lower the total monthly payments; suggest "debt_consolidation".
+- Veterans and active military (or a surviving spouse): VA loans often allow 0% down and have no monthly mortgage insurance. If they're buying and haven't said, it's fine to ask once whether anyone on the loan has served in the military.
+- First-time buyers: conventional loans can go as low as 3% down and FHA 3.5%; down payment assistance programs may help in many areas. A $400k home is very doable for many people.
+- Nervous or overwhelmed: slow down, reassure ("You don't need to have it all figured out, that's our job."), explain the next small step, no pressure.
+- "How much can I afford?": ask for yearly income, monthly debt payments and savings, then suggest "affordability". Once you have income and debts, give a rate-free monthly ballpark: lenders often allow total monthly debts, including the new house payment, up to about 45% of income before taxes, so the house payment budget (with taxes and insurance) is about income / 12 x 0.45 minus their monthly debts (e.g. $85k a year with $650 in debts: $7,083 x 0.45 = $3,187, minus $650 = about $2,540 a month). Say a comfortable budget may be lower, and that turning it into a price depends on the rate, which Stephanie can pin down.
+- Investment property (they won't live there): usually 15% down for a single-family home and 25% for 2 to 4 units. If they'll live in one unit of a 2 to 4 unit home: FHA 3.5%, conventional often 5% for a duplex (more for 3 to 4 units), VA 0% for eligible veterans.
+- Renting and unsure: suggest "rent_vs_buy". Thinking of waiting: "cost_of_waiting". Paying extra: "extra_payments".
+
+STEPHANIE. Once you know the basics (goal, rough numbers and at least one of credit or payment history), or by your third reply at the latest (never mention counting replies or chats), or whenever they ask for rates, approval, exact numbers, "what's next", a real person, or seem ready, offer a quick, no-pressure call with Stephanie and ask the best phone number or email and a good time to reach them. "What's next?" gets the real next steps in plain words (a quick call with Stephanie, then a pre-approval, then shopping with a pre-approval letter) and the offer. Mention it at most once every couple of turns; if they say not now, keep helping and don't push. When their message contains [phone] or [email], they've shared contact info: set contact_given true, thank them and say Stephanie will reach out (don't promise an exact time). Then ask for their first name if you still don't have it (unless they declined), otherwise a good time if they didn't say. If asked, you're a virtual assistant (AI), and Stephanie is a real person.
+Off-topic messages: answer briefly and kindly, then steer back to their home plans.
+
+profile: everything known so far, merging KNOWN with the new message (keep KNOWN values unless the borrower corrects them). Use "" / 0 / -1 / "unknown" for anything not known. first_name: the first name only, if they gave it in the NEW MESSAGE; otherwise copy KNOWN.first_name (it may be "(known)"). goal from their words. price is a purchase price; home_value is what their current home is worth. Dollars are whole dollars ("400k" = 400000). credit: map a stated score (e.g. 700 -> 680_739; "good" with no number -> not_sure); payment_history: on_time, some_late or not_sure. state: two-letter code. area: city or county. contact_given: true once they've shared [phone] or [email] at any point.
+suggest_calc: one calculator on our website that would help right now, or "none".
+stage: getting_to_know, exploring, offered_call (you've offered the call and they haven't shared contact info) or lead_ready (contact info shared).
+summary_for_lo: one or two sentences for Stephanie in loan officer shorthand: who, goal, numbers, credit and payment history, best fit, open questions. No name, phone or email.`;
+
+// Percents that read as an interest rate: "rate", "APR" or "interest" shortly before, or "rate" right after
+const ratePcts = (t: string) => [...String(t).matchAll(/(\d{1,2}(?:\.\d{1,3})?)\s*%/g)]
+  .filter((m) => !/^\s*(down|of)\b/i.test(String(t).slice(m.index! + m[0].length)))
+  .filter((m) => /rate|apr|interest|heloc|refi/i.test(String(t).slice(Math.max(0, m.index! - 45), m.index! + m[0].length + 12)))
+  .map((m) => +m[1]);
+// What the borrower typed: "4.5%", "4.5" or "4 1/2"
+const allPcts = (t: string) => [...String(t).matchAll(/(\d{1,2}(?:\.\d{1,3})?)\s*%|\b(\d{1,2}\.\d{1,3})\b|\b(\d{1,2}) 1\/2\b/g)]
+  .map((m) => m[1] ? +m[1] : m[2] ? +m[2] : +m[3] + 0.5);
+// deno-lint-ignore no-explicit-any
+async function customerTurn(key: string, body: any, reply: (b: unknown, status?: number) => Response) {
+  const note = typeof body.note === "string" ? body.note.trim() : "";
+  if (!note || note.length > 2000) return reply({ error: "bad_note" }, 400);
+  const known = JSON.stringify(body.profile ?? {}).slice(0, 3000);
+  const examples = JSON.stringify(body.examples ?? {}).slice(0, 500);
+  const hist = (Array.isArray(body.history) ? body.history.slice(-16) : []) as { who?: string; text?: string }[];
+  const history = hist.map((m) => `${m.who === "u" ? "Borrower" : "Assistant"}: ${String(m.text || "").slice(0, 800)}`).join("\n");
+  const content = `KNOWN:\n${known}\n\nEXAMPLES:\n${examples}\n\nCONVERSATION:\n${history || "(none yet)"}\n\nNEW MESSAGE:\n${note}`;
+  // Percents the borrower typed (their own rate, a down payment) are fine to repeat; anything else is a rate we made up
+  const theirs = new Set([...hist.filter((m) => m.who === "u").map((m) => m.text || ""), note].flatMap((t) => allPcts(String(t))));
+  // deno-lint-ignore no-explicit-any
+  const ex = (body.examples || {}) as any;
+  const client = new Anthropic({ apiKey: key });
+  const ask = async (extra: string) => {
+    const msg = await client.beta.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 8000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "low", format: { type: "json_schema", schema: CUSTOMER_SCHEMA } },
+      system: CUSTOMER_SYSTEM,
+      messages: [{ role: "user", content: content + extra }],
+    });
+    if (msg.stop_reason === "refusal" || msg.stop_reason === "max_tokens") return null;
+    const out = JSON.parse(msg.content.map((b) => b.type === "text" ? b.text : "").join(""));
+    return { out, usage: { input: msg.usage.input_tokens, output: msg.usage.output_tokens } };
+  };
+  try {
+    let r = await ask("");
+    if (!r) return reply({ error: "no_answer" }, 502);
+    // Safety net: a rate before credit and payment history are known gets one rewrite
+    const p = r.out.profile || {};
+    const unlocked = p.credit && p.credit !== "unknown" && p.payment_history && p.payment_history !== "unknown";
+    // Once credit and payment history are known, an example rate from the page (and a blend between it and their own rate) is fine
+    const exRates = Object.values(ex).filter((v) => typeof v === "number") as number[];
+    const lo = Math.min(...theirs, ...exRates), hi = Math.max(...theirs, ...exRates);
+    const leak = ratePcts(r.out.reply).filter((n) => n > 1 && n < 20 && !theirs.has(n) && !(unlocked && exRates.length && n >= lo && n <= hi));
+    let retried = false;
+    if (leak.length) {
+      const r2 = await ask(`\n\nYour last draft reply was: ${JSON.stringify(r.out.reply)}\nIt states ${leak.join("%, ")}%, which the borrower didn't give. Rewrite it without stating any interest rate we chose, following RATES.`);
+      if (r2) { r = r2; retried = true; }
+    }
+    return reply({ kind: "customer", ...r.out, retried, usage: r.usage });
   } catch (e) {
     if (e instanceof Anthropic.RateLimitError) return reply({ error: "busy" }, 429);
     if (e instanceof Anthropic.AuthenticationError) return reply({ error: "bad_key" }, 503);

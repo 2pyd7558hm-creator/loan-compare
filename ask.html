@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Ask Preview | That Mortgage Couple</title>
+<style>
+/* Staff preview of the borrower-facing assistant ("Ask That Mortgage Couple"). Nothing here is saved or sent to a CRM. */
+:root {
+  --brand-2: #3cc0c1; --brand-deep: #1f7f80;
+  --bg: #f5f5f7; --surface: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e3e3e8; --soft: #f2f2f5; --bubble: #e9e9eb;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --brand-deep: #2a9a9b; --bg: #000; --surface: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: #38383a; --soft: #2c2c2e; --bubble: #2c2c2e;
+} }
+:root[data-theme="dark"] { --brand-deep: #2a9a9b; --bg: #000; --surface: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: #38383a; --soft: #2c2c2e; --bubble: #2c2c2e }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.5 }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 40px }
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px }
+h1 { font-size: 24px; margin: 0; letter-spacing: -.01em }
+.top a { color: var(--brand-deep); font-weight: 600; text-decoration: none }
+.note { color: var(--muted); font-size: 13px; margin: 4px 0 0 }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px }
+@media (max-width: 820px) { .grid { grid-template-columns: 1fr } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px }
+.chat-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px }
+.dot { width: 36px; height: 36px; border-radius: 50%; background: var(--brand-2); color: #fff; display: grid; place-items: center; font-weight: 700 }
+.chat-head b { display: block }
+.chat-head span { color: var(--muted); font-size: 13px }
+.log { display: grid; gap: 8px; min-height: 320px; max-height: 60vh; overflow-y: auto; padding: 2px; align-content: start }
+.msg { max-width: 82%; padding: 10px 14px; border-radius: 18px; white-space: pre-wrap }
+.msg.a { background: var(--bubble); justify-self: start; border-bottom-left-radius: 6px }
+.msg.u { background: var(--brand-deep); color: #fff; justify-self: end; border-bottom-right-radius: 6px }
+.msg.t { color: var(--muted); background: none; font-style: italic }
+form { display: flex; gap: 8px; margin-top: 12px }
+textarea { flex: 1; font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; resize: none; min-width: 0 }
+button { font: inherit; font-weight: 600; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--fg); padding: 8px 16px; cursor: pointer }
+button.primary { background: var(--brand-deep); border-color: var(--brand-deep); color: #fff }
+button:disabled { opacity: .5; cursor: default }
+textarea:focus-visible, button:focus-visible { outline: 2px solid var(--brand-deep); outline-offset: 1px }
+.side h3 { font-size: 15px; margin: 0 0 8px }
+.side dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0 0 14px; font-size: 13.5px }
+.side dt { color: var(--muted) }
+.side dd { margin: 0; text-align: right; font-weight: 500 }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 10px; background: var(--soft); color: var(--muted) }
+.pill.hot { background: #e6f4ec; color: #1f7a4d }
+.sum { font-size: 13.5px; color: var(--muted); margin: 6px 0 14px }
+.ehl { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; color: var(--fg) }
+.ehl span { font-size: 10px; font-weight: 700; letter-spacing: .08em; line-height: 1.2 }
+.foot { font-size: 12px; color: var(--muted) }
+.login { max-width: 420px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1>Ask That Mortgage Couple: preview</h1>
+      <p class="note">Chat the way a borrower would on the website. This preview is for staff only: nothing is saved and no lead is sent anywhere.</p></div>
+    <a href="workspace.html">Back to workspace</a>
+  </div>
+  <div class="panel login" id="needLogin" hidden><p>Please sign in on the <a href="workspace.html">workspace</a> first, then come back to this page.</p></div>
+  <div class="grid" id="app" hidden>
+    <div class="panel">
+      <div class="chat-head"><div class="dot" aria-hidden="true">T</div><div><b>That Mortgage Couple</b><span>Virtual assistant · Stephanie can take it from here anytime</span></div></div>
+      <div class="log" id="log" aria-live="polite"></div>
+      <form id="f"><textarea id="in" rows="2" aria-label="Your message" placeholder="Ask anything, e.g. We want to buy our first home, maybe $400k. Is that crazy?"></textarea><button class="primary" id="send">Send</button></form>
+      <p class="ehl"><svg viewBox="0 0 64 64" width="30" height="30" role="img" aria-label="Equal Housing Lender"><path d="M32 4 2 26h8v32h44V26h8L32 4z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><rect x="19" y="30" width="26" height="6" fill="currentColor"/><rect x="19" y="42" width="26" height="6" fill="currentColor"/></svg><span>EQUAL HOUSING<br>LENDER</span></p>
+      <p class="foot">That Mortgage Couple, powered by Xpert Home Lending, Inc. · Company NMLS #2179191 · Personal NMLS 565968 &amp; 243972 · Equal Housing Lender. This assistant gives general information, not a loan offer or approval. Rates and programs depend on your full application.</p>
+    </div>
+    <div class="panel side">
+      <h3>What Stephanie would see</h3>
+      <p><span class="pill" id="stage">Getting to know them</span></p>
+      <p class="sum" id="sum">Nothing yet.</p>
+      <dl id="facts"></dl>
+      <button type="button" id="reset">Start over</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const sb = supabase.createClient("https://qrtyewmkarwtphcoqlko.supabase.co", "sb_publishable_8lBhstmey8uIbNnJelcbqQ_H8WpOHKT");
+const $ = (id) => document.getElementById(id);
+const escH = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+// Example rates the assistant may show once credit and payment history are known (labelled as examples). Set by David.
+const EXAMPLES = { heloc_rate: 8.5 };
+const HELLO = "Hi! I'm the virtual assistant for That Mortgage Couple. Whether you're buying your first home, thinking about a refinance or just curious, ask me anything. What are you hoping to do?";
+const CALC = { affordability: "Affordability", payment: "Payment", rent_vs_buy: "Rent vs buy", cost_of_waiting: "Cost of waiting", heloc_vs_cash_out: "HELOC vs cash-out refi",
+  debt_consolidation: "Debt consolidation", extra_payments: "Extra payments", va: "VA loan" };
+const STAGE = { getting_to_know: "Getting to know them", exploring: "Exploring options", offered_call: "Call with Stephanie offered", lead_ready: "Lead ready (not sent: preview)" };
+let log = [], profile = {}, name = "", contact = [], busy = false;
+
+// Phone numbers, emails and SSNs stay in this browser; the first name is sent once, then replaced with {name}
+const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/g, PHONE = /\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g, SSN = /\b\d{3}-\d{2}-\d{4}\b/g;
+function scrub(t) {
+  let s = String(t).replace(SSN, "[removed]").replace(EMAIL, "[email]").replace(PHONE, "[phone]");
+  if (name) s = s.replace(new RegExp("\\b" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi"), "{name}");
+  return s;
+}
+const show = (t) => name ? String(t).replace(/\{name\}/g, name) : String(t).replace(/,?\s*\{name\}(?=[\s!.,?])/g, "").replace(/\{name\},?\s*/g, "");
+function draw() {
+  const el = $("log");
+  el.innerHTML = [{ who: "a", text: HELLO }, ...log].map((m) => `<div class="msg ${m.who}">${escH(m.who === "u" ? m.text : show(m.text))}</div>`).join("");
+  el.scrollTop = el.scrollHeight;
+}
+const money = (v) => v > 0 ? "$" + Math.round(v).toLocaleString() : "";
+function drawSide(res) {
+  const p = profile, tri = (v) => v === 1 ? "Yes" : v === 0 ? "No" : "";
+  const rows = [["First name", name], ["Goal", (p.goal || "").replace(/_/g, " ").replace("unknown", "")], ["First-time buyer", tri(p.first_time_buyer)], ["Veteran", tri(p.veteran)],
+    ["Price", money(p.price)], ["Down payment", money(p.down_payment)], ["Home value", money(p.home_value)], ["Owes", money(p.current_balance)],
+    ["Current rate", p.current_rate > 0 ? p.current_rate + "%" : ""], ["Cash out", money(p.cash_out)], ["Second loan", money(p.second_balance)],
+    ["Income (yr)", money(p.income_yearly)], ["Debts (mo)", money(p.monthly_debts)], ["Savings", money(p.savings)], ["Area", [p.area, p.state].filter(Boolean).join(", ")],
+    ["Credit", (p.credit || "").replace("unknown", "").replace(/_/g, "-").replace("-plus", "+").replace("not-sure", "Not sure")],
+    ["Payments", (p.payment_history || "").replace("unknown", "").replace(/_/g, " ")], ["Timeline", p.timeline], ["Contact", contact.length ? contact.join(", ") : ""],
+    ["Suggested calculator", res && CALC[res.suggest_calc] || ""]].filter((r) => r[1]);
+  $("facts").innerHTML = rows.map((r) => `<dt>${escH(r[0])}</dt><dd>${escH(r[1])}</dd>`).join("");
+  if (res) { $("stage").textContent = STAGE[res.stage] || res.stage; $("stage").className = "pill" + (res.stage === "lead_ready" ? " hot" : ""); $("sum").textContent = res.summary_for_lo || ""; }
+}
+async function turn(text) {
+  const note = scrub(text);
+  for (const m of String(text).replace(SSN, "").match(new RegExp(EMAIL.source + "|" + PHONE.source, "g")) || []) if (!contact.includes(m)) contact.push(m);
+  const history = log.map((m) => ({ who: m.who, text: m.who === "u" ? scrub(m.raw) : m.text }));
+  log.push({ who: "u", text, raw: text }, { who: "t", text: "Typing…" }); draw();
+  busy = true; $("send").disabled = true;
+  let res = null;
+  try {
+    const r = await Promise.race([sb.functions.invoke("draft-reader", { body: { mode: "customer", note, history, profile: { ...profile, first_name: name ? "(known)" : "" }, examples: EXAMPLES } }),
+      new Promise((ok) => setTimeout(() => ok({ error: "timeout" }), 45000))]);
+    if (!r.error && r.data && r.data.kind === "customer") res = r.data;
+  } catch (e) { res = null; }
+  log.pop(); busy = false; $("send").disabled = false;
+  if (!res) { log.push({ who: "a", text: "Sorry, I'm having trouble answering right now. You can always call Stephanie at (303) 931-6776." }); draw(); return null; }
+  const p = res.profile || {};
+  if (p.first_name && p.first_name !== "(known)" && !name) name = p.first_name.trim().split(/\s+/)[0];
+  profile = { ...p, first_name: name ? "(known)" : "" };
+  log.push({ who: "a", text: res.reply });
+  draw(); drawSide(res);
+  return res;
+}
+$("f").addEventListener("submit", (e) => { e.preventDefault(); const v = $("in").value.trim(); if (!v || busy) return; $("in").value = ""; turn(v); });
+$("in").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("f").requestSubmit(); } });
+$("reset").addEventListener("click", () => { log = []; profile = {}; name = ""; contact = []; draw(); drawSide(null); $("stage").textContent = STAGE.getting_to_know; $("stage").className = "pill"; $("sum").textContent = "Nothing yet."; });
+// For testing: window.askReset() and window.askTurn(text) drive the same chat
+window.askTurn = turn; window.askReset = () => $("reset").click(); window.askState = () => ({ log, profile, name, contact });
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) { $("needLogin").hidden = false; return; }
+  $("app").hidden = false; draw(); drawSide(null);
+})();
+</script>
+</body>
+</html>
