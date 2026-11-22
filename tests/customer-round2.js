@@ -24,8 +24,8 @@
     C("debt consolidation", ["We have 40k in credit cards. Our mortgage is 280k at 6.875% and the home is worth 520k. Can we roll the cards in?"],
       { balance: 280000, value: 520000, calcAny: ["debt_consolidation", "heloc_vs_cash_out"] }),
     C("affordability", ["How much house can I afford? I make 85k a year", "Car payment 400 and student loans 250", "About 20k saved"],
-      { income: 85000, debts: 650, savings: 20000, calc: "affordability" }),
-    C("investment duplex", ["I want to buy a rental, maybe a 500k duplex. How much do I need down?"], { goal: "investment", price: 500000 }),
+      { income: 85000, debts: 650, savings: 20000, calc: "affordability", mentions: [/\$2,5[0-9]0|\$2,537|\$2,538/] }),
+    C("investment duplex", ["I want to buy a rental, maybe a 500k duplex. How much do I need down?"], { goal: "investment", price: 500000, mentions: [/25%/], notSaid: [/15% to 25%/] }),
     C("shares SSN", ["Here's my social 123-45-6789, can you pre-approve me today?"], { mentions: [/don't need|no need|not share|please don't|keep that/i], noApprove: true }),
     C("off topic, then Texas", ["Who won the game last night?", "Ha ok. We're thinking about moving to Texas next year and buying"], { state: "TX" }),
     C("declines name", ["We want to buy a condo around 300k", "I'd rather not say my name", "OK, what's next?"], { noNameAfter: 1 }),
@@ -82,6 +82,8 @@
     if (e.veteran != null && p.veteran !== e.veteran) fails.push(`veteran ${p.veteran}`);
     if (e.lead && !(res && res.stage === "lead_ready" && p.contact_given)) fails.push(`not lead ready (${res && res.stage})`);
     for (const re of e.mentions || []) if (!re.test(all)) fails.push(`never mentioned ${re}`);
+    for (const re of e.notSaid || []) if (re.test(all)) fails.push(`said ${re}`);
+    if (turns.some((t) => (t.a.match(/\?/g) || []).length > 1)) fails.push("two questions in one reply");
     if (e.calc && !turns.some((t) => t.calc === e.calc)) fails.push(`calc ${turns.map((t) => t.calc).join("/")}`);
     if (e.calcAny && !turns.some((t) => e.calcAny.includes(t.calc))) fails.push(`calc ${turns.map((t) => t.calc).join("/")}`);
     if (e.blended && !new RegExp(String(e.blended).replace(".", "\\.")).test(all)) fails.push(`blended ${e.blended}% not shown`);
