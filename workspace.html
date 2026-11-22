@@ -2305,7 +2305,7 @@ function applyAi(job, d) {
     d.extra_payments_per_year ? `${n(d.extra_payments_per_year)} extra payments a year` : d.extra_monthly ? `extra $${n(d.extra_monthly)} a month` : d.extra_payments ? "extra payments" : "",
     d.arm_vs_fixed || anyArm ? "ARM" : "", d.bid_over_asking ? "over asking" : "", d.equity ? "equity" : "", d.investment ? "investment" : "", d.paying_cash ? "paying cash" : "",
     d.seller_credit_all ? "seller credit $" + n(d.seller_credit_all) : "", d.credit_reports > 1 ? `credit reports ${Math.round(d.credit_reports)}` : "", d.dpa_amount ? `DPA $${n(d.dpa_amount)}${d.dpa_rate ? ` at ${d.dpa_rate}%` : ""}` : ""];
-  quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4), raw: job.note });
+  quickDraft(bits.filter(Boolean).join(", "), { name: job.name || "", addr: job.addr || "", opts: d.options.slice(0, 4), raw: job.note, facts: d.facts || {} });
   const notes = (d.assumptions || []).filter(Boolean);
   if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
 }
