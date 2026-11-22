@@ -370,11 +370,9 @@ $("make").onclick = async () => {
 
 Attached is the pre-approval letter for ${b.name} at a purchase price of ${money0(c.price)} with ${c.downPct.toFixed(1).replace(/\.0$/, "")}% down (${b.loanType}, ${b.term || "30 Year Fixed"}).${$("note").value.trim() ? "\n\n" + $("note").value.trim() : ""}
 
-The letter is valid through ${usDate($("expDate").value)}. Call or text me anytime with questions.
+Please send me the listing agent's contact and I'll call when you submit the offer.
 
-Stephanie Cramm
-That Mortgage Couple | Xpert Home Lending
-(303) 931-6776 | NMLS #243972`;
+Thanks 🙂`;
     $("sendBox").hidden = false;
     if (db) {
       try {
