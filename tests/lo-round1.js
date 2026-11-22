@@ -17,7 +17,7 @@
     C("fha 3.5 dn 425k co 6.25 w/ $12,750 chfa dpa deferred 0%", { price: 425000, opts: [o("fha", 30, 6.25, 3.5, { amt2: 12750 })] }),
     C("Tara Nunez refi 650 val owe 410 30y 6.375 vs 20y 6.125 co no 2nd", { name: "Tara Nunez", price: 650000, refi: true, loans: [410000, 410000] }),
     C("c/o refi val 900k bal 300k wants 50k cash out 30yr 6.875 co", { price: 900000, refi: true, loans: [350000] }),
-    C("va cash out refi 700k value owe 400k 30yr 6.25 co", { price: 700000, refi: true, vaRefi: true }),
+    C("va cash out refi 700k value owe 400k 30yr 6.25 co", { price: 700000, refi: true, vaRefi: true, loans: [408600] }),
     C("Jen Ortiz 400k CO conv 5 dn 6.875 vs 10 dn 6.75, seller paying 6k", { name: "Jen Ortiz", price: 400000, opts: [o("conv", 30, 6.875, 5, { credit: 6000 }), o("conv", 30, 6.75, 10, { credit: 6000 })] }),
     // ---- Asks for what's missing ----
     C("Hollis 30 yr vs 15 yr 10 dn", { askPrice: true }),
@@ -36,9 +36,9 @@
     C("va buyer makes 98k, car pmt 450, 0 down, 6.125 how much house", { calcs: ["aff"], data: { aff: { income: 98000, debts: 450, down: 0, program: "va", rate: 6.125 } } }),
     C("fha max purchase? income 72k, 15k saved, 300 student loans 6.25", { calcs: ["aff"], data: { aff: { income: 72000, debts: 300, down: 15000, program: "fha", rate: 6.25 } } }),
     // ---- Debt consolidation ----
-    C("debt consol refi val 600k owes 300k at 3.5% cc 40k", { refi: true, calcs: ["debt"], data: { debt: { value: 600000, mBal: 300000, mRate: 3.5, debtTotal: 40000 } } }),
-    C("c/o to pay off debts: home 520k, 1st 280k @ 6.875, cards 32k, car 18k, new 30y 6.5", { refi: true, calcs: ["debt"], data: { debt: { value: 520000, mBal: 280000, mRate: 6.875, rate: 6.5, debtTotal: 50000 } } }),
-    C("consolidate: val 750, owe 410 @7.25, heloc 60k, 30yr 6.375", { refi: true, calcs: ["debt"], data: { debt: { value: 750000, mBal: 410000, mRate: 7.25, rate: 6.375 } } }),
+    C("debt consol refi val 600k owes 300k at 3.5% cc 40k", { refi: true, loans: [340000], calcs: ["debt"], data: { debt: { value: 600000, mBal: 300000, mRate: 3.5, debtTotal: 40000 } } }),
+    C("c/o to pay off debts: home 520k, 1st 280k @ 6.875, cards 32k, car 18k, new 30y 6.5", { refi: true, loans: [330000], calcs: ["debt"], data: { debt: { value: 520000, mBal: 280000, mRate: 6.875, rate: 6.5, debtTotal: 50000 } } }),
+    C("consolidate: val 750, owe 410 @7.25, heloc 60k, 30yr 6.375", { refi: true, loans: [470000], calcs: ["debt"], data: { debt: { value: 750000, mBal: 410000, mRate: 7.25, rate: 6.375 } } }),
     // ---- Extra payments ----
     C("450k co 10 dn 30y 6.75 extra 250/mo", { price: 450000, calcs: ["amort"], data: { amort: { extra: 250, loan: 405000, rate: 6.75 } } }),
     C("600k co 20 dn 30yr 6.5, 1 extra pmt a year", { price: 600000, calcs: ["amort"], data: { amort: { loan: 480000, rate: 6.5 } }, yearlyPI: 1 }),
@@ -49,14 +49,14 @@
     C("10/6 arm 6.25 vs 30 fx 6.625 900k douglas cty co 20 dn", { price: 900000, county: "Douglas", calcs: ["arm"], data: { arm: { fixedYrs: 10, armRate: 6.25, fixedRate: 6.625, loan: 720000 } } }),
     // ---- Equity & appreciation ----
     C("show equity over 10 yrs 500k co 10 dn 6.5", { price: 500000, calcs: ["equity"], data: { equity: { price: 500000, downPct: 10, rate: 6.5, years: 10 } } }),
-    C("bid 20k over asking on 550k, 10 dn 6.75 co", { calcs: ["equity"], data: { equity: { mode: "bid", over: 20000, asking: 550000, downPct: 10, rate: 6.75 } } }),
-    C("offering 35k over list 615k fha 3.5 6.25 co", { calcs: ["equity"], data: { equity: { mode: "bid", over: 35000, asking: 615000, downPct: 3.5 } } }),
+    C("bid 20k over asking on 550k, 10 dn 6.75 co", { calcs: ["equity"], price: 570000, data: { equity: { mode: "bid", over: 20000, asking: 550000, downPct: 10, rate: 6.75 } } }),
+    C("offering 35k over list 615k fha 3.5 6.25 co", { calcs: ["equity"], price: 650000, data: { equity: { mode: "bid", over: 35000, asking: 615000, downPct: 3.5, rate: 6.25 } } }),
     // ---- Investment property ----
     C("investment prop 550k co 25 dn 7.5 rent 3,200", { calcs: ["invest"], noCalcs: ["rvb"], data: { invest: { price: 550000, downPct: 25, rate: 7.5, rent: 3200 } } }),
     C("rental 700k 25% dn 7.25 rents for 4700 co", { calcs: ["invest"], noCalcs: ["rvb"], data: { invest: { price: 700000, downPct: 25, rate: 7.25, rent: 4700 } } }),
     C("inv property 400k 20 dn 7.875 co, rent 2600/mo", { calcs: ["invest"], noCalcs: ["rvb"], data: { invest: { price: 400000, downPct: 20, rate: 7.875, rent: 2600 } } }),
     // ---- Cost of paying cash ----
-    C("cash vs finance 900k co 20 dn 6.5, 1.2M brokerage", { calcs: ["cash"], data: { cash: { price: 900000, downPct: 20, rate: 6.5 } } }),
+    C("cash vs finance 900k co 20 dn 6.5, 1.2M brokerage", { calcs: ["cash"], data: { cash: { price: 900000, downPct: 20, rate: 6.5, inv: 1200000 } } }),
     C("pay cash or finance? 650k co 25 dn 6.375, 400k savings + 300k 401k, she's 52", { calcs: ["cash"], data: { cash: { price: 650000, downPct: 25, rate: 6.375, liquid: 400000, ret: 300000, under59: 1 } } }),
     C("750k cash buyer co, compare 30y 6.625 20 dn, 800k in brokerage", { calcs: ["cash"], data: { cash: { price: 750000, downPct: 20, rate: 6.625, inv: 800000 } } }),
   ];
@@ -149,6 +149,8 @@
       const costs = pts + (+s.fees || 0) + fees.apr + fees.other + fees.prepaid + bdCost, credit = Math.min(+s.credit || 0, costs);
       const ctc = Math.max(0, price * s.downPct / 100 - (+s.amt2 || 0) + costs - credit);
       if (!refi && !near(a.cashToClose, ctc, 2)) f.push(`${L} cash to close ${Math.round(a.cashToClose)} vs ${Math.round(ctc)}`);
+      // a refinance never asks for the equity as cash: at most the closing costs
+      if (refi && a.cashToClose > costs - credit + 1) f.push(`${L} refinance cash to close ${Math.round(a.cashToClose)} is more than the costs ${Math.round(costs - credit)}`);
       if (s.credit) { const lim2 = s.type === "fha" ? 6 : s.type === "va" ? 4 : s.downPct < 10 ? 3 : s.downPct < 25 ? 6 : 9; if (s.type !== "jumbo" && s.credit > price * lim2 / 100 + 1) f.push(`${L} seller credit ${s.credit} over the ${lim2}% limit`); }
       // APR: points, lender fees and financed premiums are finance charges; payments include MI
       // (checked exactly only where there's no monthly MI, so every payment is the same P&I)
@@ -244,7 +246,11 @@
     window.lo1Results = window.lo1Results || [];
     window.lo1Ai = window.lo1Ai || [];
     const FP = Object.getPrototypeOf(sb.functions);
-    if (!FP.__lo1) { const inv = FP.invoke; FP.invoke = async function (name, opts) { const r = await inv.call(this, name, opts); window.lo1Ai.push({ case: window.lo1Case, body: opts && opts.body, data: r && r.data }); return r; }; FP.__lo1 = true; }
+    // window.lo1Mock = { [case]: [reply, reply...] } replays saved AI replies instead of calling the AI (free re-runs after a page fix)
+    if (!FP.__lo1) { const inv = FP.invoke; FP.invoke = async function (name, opts) {
+      const q = window.lo1Mock && window.lo1Mock[window.lo1Case];
+      if (window.lo1Mock) return q && q.length ? { data: JSON.parse(JSON.stringify(q.shift())) } : { error: "no saved reply" };
+      const r = await inv.call(this, name, opts); window.lo1Ai.push({ case: window.lo1Case, body: opts && opts.body, data: r && r.data }); return r; }; FP.__lo1 = true; }
     for (let n = from; n < to; n++) {
       const c = window.LO1_CASES[n]; window.lo1Case = n;
       try {
