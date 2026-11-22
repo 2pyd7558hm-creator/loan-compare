@@ -1550,10 +1550,10 @@ $("tplList").addEventListener("click", async (e) => {
 
 /* ---- Quick draft: "Jordan Smith, 123 Main St, $450,000, CO, conv vs FHA" ---- */
 // Loan options typed out in the quick draft, e.g. "no points vs 1.5 points" or "conv 5% down vs FHA 3.5% down"
-const OPT_WORD = /\b(conv|conventional|fha|va|points?|pts?|down|yr|year|years|fixed|rate|buy ?down)\b|\d\s*%/i;
+const OPT_WORD = /\b(conv|conventional|fha|va|points?|pts?|down|dn|yr|year|years|fixed|rate|buy ?down)\b|\d\s*%/i;
 // A loan option names at least one real loan detail: a rate, points, a program, a term or a down payment.
 // ("2 extra payments a year" or "2 scenarios" are not options.)
-const OPT_FEATURE = /\barm\b|\d\s*%|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b|\b(?:conv|conventional|fha|va)\b|\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b|\bbuy ?down\b|\b(?:no|zero)\s+down\b/i;
+const OPT_FEATURE = /\barm\b|\d\s*%|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b|\b(?:conv|conventional|fha|va)\b|\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b|\bbuy ?down\b|\b(?:no|zero)\s+down\b|\b\d+(?:\.\d+)?\s*%?\s*dn\b/i;
 const OPT_COUNT = /\b(\d|two|three|four)\s+(?:scenarios|options|loans|loan options)\b/i;
 // "paying cash", "all cash", "cash purchase": adds the Cost of paying cash tab and isn't a loan option
 const CASH_RE = /\b(?:pay(?:ing)?|paid)\s+(?:all\s+)?cash\b|\bcash\s+(?:purchase|buyer|offer)\b|\ball[- ]cash\b/i;
@@ -1561,7 +1561,7 @@ function optionSpecs(text) {
   // Break the text into short phrases: sentences, commas (not inside $450,000), " - ", "vs", "then"
   const SPLIT = /(?<!\d)\.(?!\d)|[;\n]|,(?!\d{3})|\s[-–—]\s|\s+then\s+/i, VS = /\s+(?:vs\.?|versus|compared (?:to|with))\s+/i;
   // Which loan details a phrase names, so "20% down, 7.375%" reads as one option (a down payment and its rate)
-  const feats = (c) => ({ rate: /\d\s*%(?!\s*down)|\b(?:at|rate)\s*\d/i.test(c), down: /%\s*down|\b(?:no|zero|\d+)\s*down\b/i.test(c),
+  const feats = (c) => ({ rate: /\d\s*%(?!\s*down)|\b(?:at|rate)\s*\d/i.test(c), down: /%\s*(?:down|dn)|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:down|dn)\b/i.test(c),
     points: /\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/i.test(c), type: /\b(?:conv|conventional|fha|va|jumbo)\b/i.test(c), term: /\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b(?!\s*arm)/i.test(c),
     product: /\bfixed\b|\barm\b|adjustable/i.test(c) });
   let specs = [];
@@ -1608,10 +1608,12 @@ function parseOption(sp, base) {
   // "7/6 ARM", "7 yr ARM", "10-year ARM"; a bare "ARM" is read as 7/6
   const am = low.match(/\b(3|5|7|10)\s*(?:\/\s*\d+|-?\s*(?:yr|year)s?)?\s*(?:arm|adjustable)\b/), arm = am ? +am[1] : /\barm\b|adjustable/.test(low) ? 7 : 0;
   let points = /\b(no|zero|0)\s*(points?|pts?)\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/);
-  let down = /\b(no|zero)\s*down\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*%?\s*down\b/);
+  let down = /\b(no|zero)\s*(?:down|dn)\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*%?\s*(?:down|dn)\b/);
   const term = num(/\b(10|15|20|25|30)\s*-?\s*(?:yr|year|years)\b(?!\s*(?:arm|adjustable))/);
   let rate = num(/(?:\b(?:rate|at)\b|@)\s*(\d+(?:\.\d+)?)\s*%?/) ?? num(/(\d+(?:\.\d+)?)\s*%(?!\s*down)/);
   if (rate !== null && (rate < 1 || rate > 15)) rate = null;
+  // a bare rate like "6.75" or "6.125" (not a down payment, points, or an amount like 1.2M)
+  if (rate === null) { const m = low.match(/(?:^|\s)((?:[2-9]|1[0-2])\.\d{1,3})(?![\d.]|\s*%?\s*(?:down|dn|k|m|mil|points?|pts?|yrs?|years?)\b)/); if (m) rate = parseFloat(m[1]); }
   const guessed = rate === null;
   if (guessed) rate = base.rate - (type === "fha" ? 0.25 : type === "va" ? 0.375 : 0) - ((term || 30) <= 15 ? 0.5 : 0) - 0.25 * (points || 0) - (arm ? 0.5 : 0);
   if (down === null) down = type === "fha" ? 3.5 : type === "va" ? 0 : base.downPct;
@@ -1620,7 +1622,7 @@ function parseOption(sp, base) {
     mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
 }
 // Words that end a client's name in a note
-const NAME_STOP = /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|purchasing|buy|buying|home|house|property|loans?|price|scenarios?|options?|compare|comparison|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|county|jumbo|cash|seller|credit|dpa|add|can|could|we|please|also|with|new|wants?|needs?|looking|is|are|has|the|a|an|to|of|in|what|if|they|their|them|he|she|his|her|it|its|i|you|did|do|does|how|about|show|me|make|change|swap|switch|try|use|let'?s|would|should|could|instead|actually|maybe|yes|no|ok|okay|sure|thanks|on|for|from|at|by|but|so|then|that|this|these|those|one|ones|both|all|hi|hello|hey|my|our|wife|husband|we're|were|i'm|im)$/i;
+const NAME_STOP = /^(conv|conventional|fha|va|vs|points?|pts?|no|down|refi|refinance|condo|purchase|purchasing|buy|buying|home|house|property|loans?|price|scenarios?|options?|compare|comparison|year|yr|fixed|rate|at|rent|income|wait|waiting|afford|cost|debt|debts|consolidate|consolidation|extra|arm|adjustable|equity|bid|over|asking|investment|investor|rental|inv|invest|noo|duplex|triplex|fourplex|townhome|townhouse|dn|bal|value|owe|owes|owed|offering|consol|makes|ftb|biweekly|cc|heloc|streamline|irrrl|pays|paying|renting|county|jumbo|cash|seller|credit|dpa|add|can|could|we|please|also|with|new|wants?|needs?|looking|is|are|has|the|a|an|to|of|in|what|if|they|their|them|he|she|his|her|it|its|i|you|did|do|does|how|about|show|me|make|change|swap|switch|try|use|let'?s|would|should|could|instead|actually|maybe|yes|no|ok|okay|sure|thanks|on|for|from|at|by|but|so|then|that|this|these|those|one|ones|both|all|hi|hello|hey|my|our|wife|husband|we're|were|i'm|im)$/i;
 const US_STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 // The client, price, state and extras in a note, read by the typed rules (also used to strip names before the AI reader)
 const STATE_WORDS = /^(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|ohio|oklahoma|oregon|pennsylvania|tennessee|texas|utah|vermont|virginia|washington|wisconsin|wyoming|new|north|south|west|rhode|county|city|springs)$/i;
@@ -1733,10 +1735,11 @@ function quickDraft(text, ai) {
   if (!county) { const cm = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+County\b/); if (cm) county = cm[1]; }
   file.county = county || undefined; file.st = st || undefined;
   // Use the options exactly as typed when there are at least two; otherwise fall back to a common comparison
-  const specs = ai && ai.opts ? null : optionSpecs(text.replace(CASH_RE, " "));
+  let specs = ai && ai.opts ? null : optionSpecs(text.replace(CASH_RE, " "));
+  if (ai && ai.opts && !ai.opts.length) { const sp = optionSpecs(raw.replace(CASH_RE, " ")); if (sp.length) specs = sp; }
   let optText, guessed = false;
   const overLimit = [];
-  if (specs ? specs.length >= 2 : ai.opts.length >= 1) {
+  if (specs ? specs.length >= (ai ? 1 : 2) : ai.opts.length >= 1) {
     const base = { ...state.scenarios[0] };
     const opts = specs ? specs.map((sp) => parseOption(sp, base)) : ai.opts.map((o) => aiOption(o, base));
     // Conventional loans over the county limit are jumbo (no mortgage insurance); "jumbo" anywhere in the text means all of them

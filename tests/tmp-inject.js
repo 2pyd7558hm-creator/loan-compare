@@ -142,5 +142,165 @@ window.renderClosing = function renderClosing(a) {
     (t.seller ? `<span>Paid by seller <b>${usd.format(t.seller)}</b></span>` : "") + (t.lender ? `<span>Paid by lender <b>${usd.format(t.lender)}</b></span>` : "") +
     (state.closing.template ? `<span style="color:var(--muted)">From template: ${escAttr(state.closing.template)}</span>` : "");
 };
+window.optionSpecs = function optionSpecs(text) {
+  // Break the text into short phrases: sentences, commas (not inside $450,000), " - ", "vs", "then"
+  const SPLIT = /(?<!\d)\.(?!\d)|[;\n]|,(?!\d{3})|\s[-–—]\s|\s+then\s+/i, VS = /\s+(?:vs\.?|versus|compared (?:to|with))\s+/i;
+  // Which loan details a phrase names, so "20% down, 7.375%" reads as one option (a down payment and its rate)
+  const feats = (c) => ({ rate: /\d\s*%(?!\s*down)|\b(?:at|rate)\s*\d/i.test(c), down: /%\s*(?:down|dn)|\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:down|dn)\b/i.test(c),
+    points: /\b(?:no|zero|\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/i.test(c), type: /\b(?:conv|conventional|fha|va|jumbo)\b/i.test(c), term: /\b(?:10|15|20|25|30)\s*-?\s*(?:yr|year)s?\b(?!\s*arm)/i.test(c),
+    product: /\bfixed\b|\barm\b|adjustable/i.test(c) });
+  let specs = [];
+  for (const group of text.split(VS)) {
+    let cur = null;
+    for (const raw of group.split(SPLIT).map((x) => (x || "").trim()).filter(Boolean)) {
+      // "no points and 1.5 points" / "7.375% and 10% down": split lists when every part is a loan detail
+      const sub = raw.split(/\s+(?:and|or|&)\s+|\s*\/\s*/i).map((x) => x.trim()).filter(Boolean);
+      for (const c of sub.length > 1 && sub.every((x) => OPT_FEATURE.test(x)) ? sub : [raw]) {
+        const f = feats(c);
+        // A phrase that adds details the option before it doesn't have yet finishes that option ("30 yr fixed at 7%, with 1 point")
+        if (cur && (OPT_FEATURE.test(c) || /^(?:with|at|plus)\b/i.test(c)) && !Object.keys(f).some((k) => f[k] && cur.f[k])) {
+          cur.text += " " + c; Object.keys(f).forEach((k) => { cur.f[k] = cur.f[k] || f[k]; });
+        } else if (OPT_FEATURE.test(c)) { cur = { text: c, f }; specs.push(cur); }
+      }
+    }
+  }
+  specs = specs.map((x) => x.text);
+  // typed without commas ("John Smith 450k CO no points vs ..."): start the first option at its first loan word
+  const m0 = specs[0] && specs[0].match(/\b(?:no|zero|conv|conventional|fha|va|buy ?down|\d+(?:\.\d+)?\s*(?:%|points?|pts?|-?\s*(?:yr|year)s?\b))/i);
+  if (m0 && m0.index > 0) specs[0] = specs[0].slice(m0.index);
+  // "a loan comparison with 2 scenarios": keep exactly that many
+  const cm = text.match(OPT_COUNT), want = cm ? ({ two: 2, three: 3, four: 4 }[cm[1].toLowerCase()] || +cm[1]) : 4;
+  return specs.slice(0, Math.min(4, want || 4));
+};
+window.parseOption = function parseOption(sp, base) {
+  const low = sp.toLowerCase(), num = (re) => { const m = low.match(re); return m ? parseFloat(m[1]) : null; };
+  const type = /\bfha\b/.test(low) ? "fha" : /\bva\b/.test(low) ? "va" : /\bjumbo\b/.test(low) ? "jumbo" : "conv";
+  // "7/6 ARM", "7 yr ARM", "10-year ARM"; a bare "ARM" is read as 7/6
+  const am = low.match(/\b(3|5|7|10)\s*(?:\/\s*\d+|-?\s*(?:yr|year)s?)?\s*(?:arm|adjustable)\b/), arm = am ? +am[1] : /\barm\b|adjustable/.test(low) ? 7 : 0;
+  let points = /\b(no|zero|0)\s*(points?|pts?)\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*(?:points?|pts?)\b/);
+  let down = /\b(no|zero)\s*(?:down|dn)\b/.test(low) ? 0 : num(/(\d+(?:\.\d+)?)\s*%?\s*(?:down|dn)\b/);
+  const term = num(/\b(10|15|20|25|30)\s*-?\s*(?:yr|year|years)\b(?!\s*(?:arm|adjustable))/);
+  let rate = num(/(?:\b(?:rate|at)\b|@)\s*(\d+(?:\.\d+)?)\s*%?/) ?? num(/(\d+(?:\.\d+)?)\s*%(?!\s*down)/);
+  if (rate !== null && (rate < 1 || rate > 15)) rate = null;
+  // a bare rate like "6.75" or "6.125" (not a down payment, points, or an amount like 1.2M)
+  if (rate === null) { const m = low.match(/(?:^|\s)((?:[2-9]|1[0-2])\.\d{1,3})(?![\d.]|\s*%?\s*(?:down|dn|k|m|mil|points?|pts?|yrs?|years?)\b)/); if (m) rate = parseFloat(m[1]); }
+  const guessed = rate === null;
+  if (guessed) rate = base.rate - (type === "fha" ? 0.25 : type === "va" ? 0.375 : 0) - ((term || 30) <= 15 ? 0.5 : 0) - 0.25 * (points || 0) - (arm ? 0.5 : 0);
+  if (down === null) down = type === "fha" ? 3.5 : type === "va" ? 0 : base.downPct;
+  const bdm = low.match(/\b([123])\s*[-\/]\s*[0-2](?:\s*[-\/]\s*[01])?\s*(?:temporary\s+)?buy\s*-?\s*downs?\b/), bd = bdm ? +bdm[1] : 0;
+  return { guessed, src: sp, bd, typed: { points: points !== null, down: /\bdown\b/.test(low) }, s: { name: "", type, term: term || 30, rate: +rate.toFixed(3), points: points || 0, arm, fees: base.fees, downPct: down,
+    mi: type === "conv" ? convPmi(down, term || 30) : 0 } };
+};
+window.quickDraft = function quickDraft(text, ai) {
+  let { parts, low, price, st, name, addr, rent, income, extraYearN, extraMonth } = noteBasics(text);
+  if (ai) { name = ai.name || null; addr = ai.addr || addr; }
+  const refi = /\brefi(nance)?\b/.test(low), condo = /\bcondo\b/.test(low), raw = (ai && ai.raw) || text;
+  // Numbers for the tabs: the AI reader's facts, else what the typed rules can read
+  const F = { ...noteFacts(raw) };
+  Object.entries((ai && ai.facts) || {}).forEach(([k, v]) => { if (v != null && v !== false && !(Array.isArray(v) && !v.length)) F[k] = v; });
+  let preset = "starter";
+  if (/\bpoints?\b|buy ?down/.test(low)) preset = "points";
+  else if (/\b15\b/.test(low)) preset = "term";
+  else if (/\bva\b/.test(low) && /\bfha\b/.test(low)) preset = "convfhava";
+  else if (/\bfha\b/.test(low)) preset = "convfha";
+  else if (/\bdown\b/.test(low)) preset = "down";
+  // Start a fresh comparison, then fill it in
+  newComparison();
+  state.creditReports = creditReportsFrom(text, ai ? ai.raw : "");
+  state.payoff = null; state.irrrl = !!(F.irrrl || /\birrrl\b|\bva\s+streamline\b/i.test(raw));
+  if (F.hoa_monthly) { state.hoa = Math.round(F.hoa_monthly); $("hoa").value = state.hoa; }
+  draftInfo = { guessed: [], noPrice: !price, overLimit: 0 };
+  if (name) $("cName").value = name;
+  $("cTitle").value = (refi ? "Refinance options" : "Purchase options") + (addr ? ", " + addr : "");
+  if (price) setPrice(price);
+  if (st) {
+    const pool = feeTemplates.filter((t) => (t.state || "").toUpperCase() === st);
+    const fits = (t) => refi ? /refi/i.test(t.name) : condo ? /condo/i.test(t.name) : !/refi|condo/i.test(t.name);
+    const pick = pool.find((t) => /^xpert/i.test(t.name) && fits(t)) || pool.find(fits) || pool[0];
+    if (pick) applyFeeTemplate(pick);
+    else applyDefaultTemplate(refi, condo);
+  } else applyDefaultTemplate(refi, condo);
+  // County, for the conforming loan limit: "Eagle County" (a high-cost county) or any "<name> County"
+  let county = null;
+  if (st) county = Object.keys(CLL_HIGH[st] || {}).find((c) => new RegExp("\\b" + c.replace(/[.'\\]/g, ".") + "\\s+county\\b", "i").test(text)) || null;
+  if (!county) { const cm = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+County\b/); if (cm) county = cm[1]; }
+  file.county = county || undefined; file.st = st || undefined;
+  // Use the options exactly as typed when there are at least two; otherwise fall back to a common comparison
+  let specs = ai && ai.opts ? null : optionSpecs(text.replace(CASH_RE, " "));
+  if (ai && ai.opts && !ai.opts.length) { const sp = optionSpecs(raw.replace(CASH_RE, " ")); if (sp.length) specs = sp; }
+  let optText, guessed = false;
+  const overLimit = [];
+  if (specs ? specs.length >= (ai ? 1 : 2) : ai.opts.length >= 1) {
+    const base = { ...state.scenarios[0] };
+    const opts = specs ? specs.map((sp) => parseOption(sp, base)) : ai.opts.map((o) => aiOption(o, base));
+    // Conventional loans over the county limit are jumbo (no mortgage insurance); "jumbo" anywhere in the text means all of them
+    const allJumbo = /\bjumbo\b/i.test(text) && !opts.some((o) => /\bjumbo\b/i.test(o.src));
+    for (const o of opts) {
+      if (o.s.type !== "conv") continue;
+      const lc = loanClass(state.price * (1 - o.s.downPct / 100), st, county);
+      if (allJumbo || lc.kind === "jumbo") { o.s.type = "jumbo"; o.s.mi = 0; }
+      else if (lc.kind === "unknown") overLimit.push(o);
+    }
+    nameOptions(opts);
+    // "seller credit $8,000" / "3% seller concessions" and "DPA $15,000" / "2nd of $20k" apply to every option
+    const sc = text.match(/\bseller\s+(?:credit|concessions?|contributions?)\s*(?:of|is|:)?\s*\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|%)?|\b(\d+(?:\.\d+)?)\s*%\s*(?:in\s+)?seller\s+(?:credit|concessions?|contributions?)/i);
+    const credit = !sc ? 0 : sc[3] ? state.price * +sc[3] / 100 : sc[2] === "%" ? state.price * parseFloat(sc[1]) / 100 : parseFloat(sc[1].replace(/,/g, "")) * (sc[2] ? 1000 : 1);
+    const dm = text.match(/\b(?:dpa|down\s+payment\s+assistance|2nd(?:\s+(?:loan|mortgage))?|second\s+(?:loan|mortgage))\s*(?:of|for|is|:)?\s*\$?\s*(\d[\d,]*)\s*(k)?/i);
+    const amt2 = dm ? parseFloat(dm[1].replace(/,/g, "")) * (dm[2] ? 1000 : 1) : 0;
+    const dr = text.match(/\b(?:dpa|assistance|2nd|second)[^.,;]*?\bat\s*(\d+(?:\.\d+)?)\s*%/i);
+    opts.forEach((o) => { if (o.bd) o.s.bd = o.bd; if (credit) o.s.credit = Math.round(credit); if (amt2 >= 1000) Object.assign(o.s, { amt2, rate2: dr ? +dr[1] : 0, term2: dr ? 30 : 0 }); });
+    // The AI reader can tie a seller credit or a 2nd loan to one option
+    opts.forEach((o) => { const x = o.ai; if (!x) return; if (x.seller_credit) o.s.credit = Math.round(x.seller_credit); if (x.second_amount >= 1000) Object.assign(o.s, { amt2: Math.round(x.second_amount), rate2: x.second_rate || 0, term2: x.second_rate ? 30 : 0 }); });
+    guessed = opts.some((o) => o.guessed);
+    draftInfo.guessed = opts.map((o, i) => o.guessed ? i : -1).filter((i) => i >= 0);
+    opts.forEach((o) => { o.s.est = !!o.guessed; });
+    state.scenarios = opts.map((o) => o.s);
+    // A refinance: the loan is what's owed (plus any second, debts paid off and cash out), whatever down payment was read
+    if (refi && state.price) {
+      const rn = refiNumbers(raw, F);
+      if (rn.owed) {
+        state.payoff = rn.owed + (rn.second || 0) + rn.debt;
+        setRefiLoan(Math.min(state.payoff + rn.cashOut, state.price * 0.97));
+        if (rn.second === null) draftInfo.refiAsk = { debt: rn.debt, owed: rn.owed, cashOut: rn.cashOut };
+      } else if (!opts.some((o) => o.typed.down)) { setRefiLoan(state.price * 0.8); draftInfo.refiAsk = { debt: rn.debt, second: rn.second, cashOut: rn.cashOut }; }
+      nameOptions(opts);
+    }
+    renderCards(); render();
+    optText = opts.map((o) => o.s.name).join(" vs ");
+  } else if (refi && state.price) {
+    // A refinance with no loans typed: 30 and 15 year conventional for what they owe (plus debts being paid off), or 80% of the value
+    // With no balance given, start at 80% of the value and ask for the balance and any second mortgage
+    const rp = refiNumbers(raw, F);
+    const known = !!rp.owed;
+    const loan = known ? rp.owed + (rp.second || 0) + rp.debt + rp.cashOut : state.price * 0.8;
+    if (known) state.payoff = rp.owed + (rp.second || 0) + rp.debt;
+    if (!known) draftInfo.refiAsk = { debt: rp.debt, second: rp.second, cashOut: rp.cashOut };
+    else if (rp.second === null) draftInfo.refiAsk = { debt: rp.debt, owed: rp.owed, cashOut: rp.cashOut };
+    const a = { ...state.scenarios[0] };
+    file.st = st || undefined; file.county = county || undefined;
+    state.scenarios = [30, 15].map((term) => ({ ...a, type: "conv", term, arm: 0, points: 0, bd: 0, credit: 0, amt2: 0, fthb: false, rate: +(term === 15 ? (+a.rate || 6.75) - 0.5 : (+a.rate || 6.75)).toFixed(3), est: true }));
+    const down = setRefiLoan(Math.min(loan, state.price * 0.97));
+    nameOptions(state.scenarios.map((x) => ({ s: x, typed: { down: false } })));
+    renderCards(); render();
+    optText = state.scenarios.map((x) => x.name).join(" vs ") + ` (loan ${usd.format(Math.round(state.price * (1 - down / 100)))})`;
+    draftInfo.guessed = [0, 1]; draftInfo.sample = true;
+  } else {
+    applyPreset(preset);
+    optText = $("preset").querySelector(`option[value="${preset}"]`).textContent;
+    draftInfo.guessed = state.scenarios.map((x, i) => i); draftInfo.sample = true;
+    state.scenarios.forEach((x) => { x.est = true; });
+  }
+  // State's FHFA home value growth (5-yr average) for the equity chart
+  if (st && fhfaRate(st, DEFAULT_SRC) !== null) { state.appreciation = fhfaRate(st, DEFAULT_SRC); $("appreciation").value = state.appreciation; render(); }
+  file.st = st || undefined; file.rent = rent || undefined;
+  if (st) stateEscrow(st);
+  const added = calcsFromNote(text, { refi, rent, income, extraYearN, extraMonth, specs, facts: F, raw });
+  if (added.length) drawTabs();
+  draftInfo.overLimit = overLimit.length;
+  const bits = [name && "client " + name, price && "price " + usd.format(price), st && "state " + st, "options: " + optText, added.length && "also added " + added.join(", "), state.creditReports > 1 && `credit report for ${state.creditReports} (the buyers aren't a couple, so each gets a report)`];
+  const limNote = overLimit.length ? ` ${overLimit.length === 1 ? "One loan is" : "Some loans are"} over the ${usd.format(CLL_BASE)} conforming limit: add the ${st ? "county" : "state and county"} (e.g. "Eagle County, CO") to tell high balance from jumbo.` : "";
+  autoTitle();
+  say("saveStatus", "Drafted " + bits.filter(Boolean).join(", ") + "." + limNote + (guessed ? " Rates you didn't type are placeholders, so enter today's pricing" : " Check the pricing") + ", then save.");
+};
 (() => { const l = document.querySelector("#price").closest("label"); if (!document.getElementById("priceLbl")) l.firstChild.replaceWith(Object.assign(document.createElement("span"), { id: "priceLbl", textContent: "Purchase price" })); render(); })();
-"analyze,normFeeItems,feeAmount,closingTotals,renderClosing";
+"analyze,normFeeItems,feeAmount,closingTotals,renderClosing,optionSpecs,parseOption,quickDraft";
