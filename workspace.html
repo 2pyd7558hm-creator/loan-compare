@@ -1400,6 +1400,7 @@ async function clientView() {
   if (error || !data || !data.length) { lock(true); show("vClientMissing"); return; }
   const c = data[0];
   const f0 = wrapFile(c.data);
+  $("cTitle").value = c.title || ""; // a refinance title switches the comparison to refinance wording
   if (tabParam && f0.calcs.some((t) => t.id === tabParam && isShared(t))) f0.active = tabParam;
   setState(f0);
   if (!file.calcs.length) { lock(true); show("vClientMissing"); return; }
@@ -2469,7 +2470,7 @@ function autoTitle(force) {
   el.value = (refi ? "Refinance Options" : "Purchase Options") + ": " + words.join(", ") + (addr ? " · " + addr : "");
 }
 $("cTitle").addEventListener("input", () => { titleHand = true; });
-function newComparison() { titleHand = false; stopPresenting(); current = null; setState(JSON.parse(JSON.stringify(BLANK))); applyDefaultTemplate(); fillClient(null); drawList(); }
+function newComparison() { titleHand = false; stopPresenting(); current = null; fillClient(null); setState(JSON.parse(JSON.stringify(BLANK))); applyDefaultTemplate(); drawList(); } // title cleared first, so the blank form isn't drawn as the last client's refinance
 async function openComparison(id) {
   const { data, error } = await sb.from("comparisons").select("*").eq("id", id).single();
   if (error) { say("saveStatus", "Couldn't open it: " + error.message, true); return; }

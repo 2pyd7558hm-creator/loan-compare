@@ -458,5 +458,6 @@ window.applyAi = function applyAi(job, d) {
   const notes = (d.assumptions || []).filter(Boolean);
   if (notes.length) say("saveStatus", $("saveStatus").textContent + " AI reader notes: " + notes.join(" "));
 };
+window.newComparison = function newComparison() { titleHand = false; stopPresenting(); current = null; fillClient(null); setState(JSON.parse(JSON.stringify(BLANK))); applyDefaultTemplate(); drawList(); };
 (() => { const l = document.querySelector("#price").closest("label"); if (!document.getElementById("priceLbl")) l.firstChild.replaceWith(Object.assign(document.createElement("span"), { id: "priceLbl", textContent: "Purchase price" })); render(); })();
-"vaFeeFor,analyze,render,setCompare,nameOptions,quickDraft,noteFacts,refiParts,refiNumbers,calcsFromNote,asAskBalance,asSuggest,applyAi";
+"vaFeeFor,analyze,render,setCompare,nameOptions,quickDraft,noteFacts,refiParts,refiNumbers,calcsFromNote,asAskBalance,asSuggest,applyAi,newComparison";
