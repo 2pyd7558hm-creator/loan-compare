@@ -86,6 +86,9 @@ details summary { cursor: pointer; font-family: var(--display); font-weight: 700
 .docs .h { font-size: .7rem; text-transform: uppercase; color: var(--muted); letter-spacing: .05em }
 .docs input { width: 16px; height: 16px }
 .tbtn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: .85rem; padding: 0 }
+.override { display: grid; gap: 8px; border: 1px dashed var(--warn); border-radius: 8px; padding: 10px }
+.override .confirm { color: var(--warn) }
+tr.removed td { color: var(--muted) }
 .banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: .9rem }
 @media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s } }
 </style>
@@ -151,6 +154,10 @@ details summary { cursor: pointer; font-family: var(--display); font-weight: 700
         <div class="fig"><span>Program</span><b id="fProg">—</b></div>
       </div>
       <ul class="checks" id="checks"><li class="warn"><span>•</span><span>Pick an approved borrower to start.</span></li></ul>
+      <div class="override" id="ovBox" hidden>
+        <label class="confirm"><input type="checkbox" id="ovOn"><span>Override the red checks. We know something that isn't in Arrive yet.</span></label>
+        <input id="ovReason" placeholder="Reason (required), e.g. new paystub received, Arrive not updated yet" hidden>
+      </div>
       <label class="confirm"><input type="checkbox" id="confirm"><span>I confirm this letter matches the borrower's approved file and I am OK sending it.</span></label>
       <button class="primary" id="make" disabled>Create PDF letter</button>
       <p class="msg" id="makeMsg" aria-live="polite"></p>
@@ -169,7 +176,10 @@ details summary { cursor: pointer; font-family: var(--display); font-weight: 700
   <section class="panel" aria-labelledby="appH">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap">
       <h2 id="appH">Approved borrowers</h2>
-      <button class="ghost" id="newB">Add approved borrower</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="ghost" id="showRemoved" aria-pressed="false" hidden>Show removed</button>
+        <button class="ghost" id="newB">Add approved borrower</button>
+      </div>
     </div>
     <p class="sub" style="font-size:.88rem">Borrowers sent from Arrive or Surefire show up here to confirm. Anyone else, add by hand when the pre-approval is issued in ARIVE. These limits are what every letter is checked against.</p>
     <div class="banner" id="sfPending" hidden></div>
@@ -256,7 +266,7 @@ const addDays = (s, n) => { const d = new Date(s + "T12:00:00"); d.setDate(d.get
 const usDate = s => { if (!s) return ""; const [y,m,d] = s.split("-"); return `${m}/${d}/${y}` };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-let db = null, user = null, downloads = null;
+let db = null, user = null, downloads = null, staffEmail = null;
 let borrowers = [];     // [{id, ...data}]
 let downUnit = "pct";
 let lastPdf = null, lastName = "";
@@ -269,11 +279,13 @@ function setUnit(u) { downUnit = u; $("unitPct").setAttribute("aria-pressed", u 
 $("unitPct").onclick = () => setUnit("pct"); $("unitAmt").onclick = () => setUnit("amt");
 ["borrower","price","down","letterDate","expDate"].forEach(id => $(id).addEventListener("input", evaluate));
 $("confirm").addEventListener("change", evaluate);
+$("ovOn").addEventListener("change", () => { evaluate(); if ($("ovOn").checked) $("ovReason").focus() });
+$("ovReason").addEventListener("input", evaluate);
 
 function currentBorrower() {
   const v = $("borrower").value.trim().toLowerCase();
   if (!v) return null;
-  return borrowers.find(b => b.name.toLowerCase() === v) || null;
+  return borrowers.find(b => !b.archived && b.name.toLowerCase() === v) || null;
 }
 function calc() {
   const price = num($("price").value);
@@ -283,7 +295,7 @@ function calc() {
   const ltv = price > 0 ? loan / price * 100 : NaN;
   return { price, down, downPct: price > 0 ? down / price * 100 : NaN, loan, ltv };
 }
-let ready = false;
+let ready = false, overriding = false, failedChecks = [];
 function evaluate() {
   const b = currentBorrower();
   const c = calc();
@@ -292,7 +304,7 @@ function evaluate() {
   const add = (ok, text, warn) => { items.push([ok ? "ok" : (warn ? "warn" : "bad"), text]); if (!ok && !warn) pass = false };
 
   // keep letter expiry within the approval
-  if (b && b.expiresOn && $("expDate").value > b.expiresOn) $("expDate").value = b.expiresOn;
+  if (b && b.expiresOn && b.expiresOn >= today() && $("expDate").value > b.expiresOn) $("expDate").value = b.expiresOn;
 
   if (!b) { add(false, $("borrower").value.trim() ? "Not on the approved list. Add them below once ARIVE shows an approval." : "Pick an approved borrower to start.", !$("borrower").value.trim()); pass = false }
   if (!(c.price > 0)) { add(false, "Enter the purchase price.", true); pass = false }
@@ -311,6 +323,16 @@ function evaluate() {
     add(b.expiresOn >= t, b.expiresOn >= t ? `Approval is current until ${usDate(b.expiresOn)}` : `Approval expired on ${usDate(b.expiresOn)}. Refresh it in ARIVE first.`);
   }
   if ($("expDate").value && $("letterDate").value && $("expDate").value < $("letterDate").value) add(false, "Letter expiry is before the letter date.");
+  // Override: only when a borrower is picked and price/down are filled in, and a reason is given
+  const canOverride = !pass && !!b && c.price > 0 && c.loan > 0 && !!$("letterDate").value && !!$("expDate").value;
+  if (!canOverride) $("ovOn").checked = false;
+  $("ovBox").hidden = !canOverride;
+  $("ovReason").hidden = !$("ovOn").checked;
+  failedChecks = items.filter(([k]) => k === "bad").map(([, t]) => t);
+  overriding = canOverride && $("ovOn").checked && $("ovReason").value.trim().length >= 3;
+  if (canOverride && $("ovOn").checked && !overriding) items.push(["warn", "Type a reason for the override."]);
+  pass = pass || overriding;
+  $("make").textContent = overriding ? "Create PDF letter (override)" : "Create PDF letter";
   ready = pass;
   $("checks").innerHTML = items.map(([k, t]) => `<li class="${k}"><span>${k === "ok" ? "✓" : k === "bad" ? "✕" : "•"}</span><span>${esc(t)}</span></li>`).join("");
   $("make").disabled = !(pass && $("confirm").checked);
@@ -378,14 +400,14 @@ Thanks 🙂`;
       try {
         await db.collection("letters").add({ borrowerId: b.id, borrower: b.name, price: c.price, down: Math.round(c.down*100)/100, downPct: Math.round(c.downPct*100)/100,
           loan: c.loan, ltv: Math.round(c.ltv*100)/100, loanType: b.loanType, letterDate: $("letterDate").value, expires: $("expDate").value,
-          note: $("note").value.trim(), createdAt: new Date().toISOString(), createdBy: user ? await user.id().catch(() => null) : null });
+          note: $("note").value.trim(), override: overriding ? { reason: $("ovReason").value.trim(), failed: failedChecks, by: staffEmail } : null, createdAt: new Date().toISOString(), createdBy: user ? await user.id().catch(() => null) : null });
       } catch (e) { console.warn("log", e) }
     }
     await savePdf();
   } catch (e) {
     $("makeMsg").textContent = "The letter could not be built: " + (e && e.message || e); $("makeMsg").className = "msg err";
   }
-  $("confirm").checked = false; evaluate();
+  $("confirm").checked = false; $("ovOn").checked = false; $("ovReason").value = ""; evaluate();
 };
 $("saveAgain").onclick = savePdf;
 $("copyEmail").onclick = async () => {
@@ -440,29 +462,49 @@ $("bForm").addEventListener("submit", async e => {
     $("bForm").hidden = true;
   } catch (err) { $("bMsg").textContent = "Couldn't save: " + (err.message || err.code); $("bMsg").className = "msg err" }
 });
+let showRemoved = false;
+$("showRemoved").onclick = () => { showRemoved = !showRemoved; renderBorrowers() };
+async function setArchived(id, on) {
+  const b = borrowers.find(x => x.id === id); if (!b || !db) return;
+  if (on && !confirm(`Remove ${b.name} from the approved list? Their letters stay in the log, and you can restore them from "Show removed".`)) return;
+  const body = { ...b }; delete body.id;
+  Object.assign(body, on ? { archived: true, archivedAt: new Date().toISOString(), archivedReason: "Removed by staff" } : { archived: false, archivedAt: null, archivedReason: null });
+  try { await db.collection("borrowers").doc(id).set(body) } catch (err) { alert("Couldn't update: " + (err.message || err.code)) }
+}
 function renderBorrowers() {
-  $("borrowerList").innerHTML = borrowers.map(b => `<option value="${esc(b.name)}"></option>`).join("");
+  const active = borrowers.filter(b => !b.archived), removed = borrowers.filter(b => b.archived);
+  $("showRemoved").hidden = !removed.length && !showRemoved;
+  $("showRemoved").textContent = showRemoved ? "Hide removed" : `Show removed (${removed.length})`;
+  $("showRemoved").setAttribute("aria-pressed", showRemoved);
+  const list = showRemoved ? removed : active;
+  $("borrowerList").innerHTML = active.map(b => `<option value="${esc(b.name)}"></option>`).join("");
   const t = today();
-  $("bRows").innerHTML = borrowers.map(b => `<tr>
+  $("bRows").innerHTML = list.map(b => b.archived ? `<tr class="removed">
+    <td>${esc(b.name)}</td><td>${esc(b.loanType)}</td><td class="num">${money0(b.maxPrice)}</td><td class="num">${money0(b.maxLoan)}</td>
+    <td class="num">${Number.isFinite(b.maxLtv) ? b.maxLtv + "%" : "—"}</td>
+    <td><span class="pill bad" title="${esc(b.archivedReason || "")}">${/arrive/i.test(b.archivedReason || "") ? "Loan closed" : "Removed"}</span></td>
+    <td><button class="tbtn" data-restore="${esc(b.id)}">Restore</button></td></tr>` : `<tr>
     <td>${esc(b.name)}</td><td>${esc(b.loanType)}</td><td class="num">${money0(b.maxPrice)}</td><td class="num">${money0(b.maxLoan)}</td>
     <td class="num">${Number.isFinite(b.maxLtv) ? b.maxLtv + "%" : "—"}</td>
     <td>${b.needsReview ? '<span class="pill warn">Confirm limits</span>' : `<span class="pill ${b.expiresOn >= t ? "ok" : "bad"}">${usDate(b.expiresOn)}</span>`}</td>
-    <td>${b.needsReview ? `<button class="tbtn" data-edit="${esc(b.id)}">Review</button>` : `<button class="tbtn" data-use="${esc(b.id)}">Use</button> · <button class="tbtn" data-edit="${esc(b.id)}">Edit</button>`}</td></tr>`).join("");
-  const pending = borrowers.filter(b => b.needsReview).length;
+    <td>${b.needsReview ? `<button class="tbtn" data-edit="${esc(b.id)}">Review</button>` : `<button class="tbtn" data-use="${esc(b.id)}">Use</button> · <button class="tbtn" data-edit="${esc(b.id)}">Edit</button>`} · <button class="tbtn" data-arch="${esc(b.id)}">Remove</button></td></tr>`).join("");
+  const pending = active.filter(b => b.needsReview).length;
   $("sfPending").hidden = !pending;
   $("sfPending").textContent = pending === 1 ? "1 imported borrower needs their limits confirmed." : `${pending} imported borrowers need their limits confirmed.`;
-  $("bEmpty").hidden = borrowers.length > 0;
-  $("bEmpty").textContent = "No approved borrowers yet. Add one when a pre-approval is issued in ARIVE.";
+  $("bEmpty").hidden = list.length > 0;
+  $("bEmpty").textContent = showRemoved ? "No removed borrowers." : "No approved borrowers yet. Add one when a pre-approval is issued in ARIVE.";
   evaluate();
 }
 $("bRows").addEventListener("click", e => {
   const u = e.target.dataset.use, ed = e.target.dataset.edit;
   if (u) { const b = borrowers.find(x => x.id === u); $("borrower").value = b.name; evaluate(); $("price").focus() }
   if (ed) openForm(borrowers.find(x => x.id === ed));
+  if (e.target.dataset.arch) setArchived(e.target.dataset.arch, true);
+  if (e.target.dataset.restore) setArchived(e.target.dataset.restore, false);
 });
 function renderLetters(rows) {
   $("lRows").innerHTML = rows.map(l => `<tr><td>${esc(new Date(l.createdAt).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}))}</td>
-    <td>${esc(l.borrower)}</td><td class="num">${money0(l.price)}</td><td class="num">${l.downPct}%</td><td class="num">${money0(l.loan)}</td><td class="num">${l.ltv}%</td><td>${usDate(l.expires)}</td></tr>`).join("");
+    <td>${esc(l.borrower)}${l.override ? ` <span class="pill warn" title="${esc("Override: " + l.override.reason)}">Override</span>` : ""}</td><td class="num">${money0(l.price)}</td><td class="num">${l.downPct}%</td><td class="num">${money0(l.loan)}</td><td class="num">${l.ltv}%</td><td>${usDate(l.expires)}</td></tr>`).join("");
   $("lEmpty").hidden = rows.length > 0;
 }
 
@@ -513,6 +555,7 @@ async function startSession(session) {
   if (!session) { showApp(false); return }
   const { data: ok } = await sb.rpc("is_staff");
   if (!ok) { showApp(false); $("loginStatus").textContent = "This login isn't set up as staff yet. Ask David to add you."; return }
+  staffEmail = session.user.email || null;
   $("who").innerHTML = esc(session.user.email) + ' · <button class="tbtn" id="signOut">Sign out</button>';
   $("signOut").onclick = async () => { await sb.auth.signOut(); location.reload() };
   if (db) return;
